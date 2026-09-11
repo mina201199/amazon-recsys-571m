@@ -22,6 +22,9 @@ from amazon_recsys.ingest import download
 
 
 def main() -> int:
+    # 重導向到檔案時 stdout 會緩衝，長時間執行就看不到進度
+    sys.stdout.reconfigure(line_buffering=True)
+
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument(
         "--what", choices=["reviews", "meta", "all"], default="reviews",

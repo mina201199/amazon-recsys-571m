@@ -1,0 +1,331 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>在一台桌機上處理 5.71 億筆評論</title>
+<meta name="description" content="對完整的 Amazon Reviews 2023 資料集建立兩階段推薦系統的過程紀錄：三個我原本猜錯、被量測糾正的地方。">
+<style>
+:root {
+  color-scheme: light;
+  --surface:        #fcfcfb;
+  --surface-raised: #f4f4f1;
+  --border:         #e2e1dc;
+  --text-primary:   #0b0b0b;
+  --text-secondary: #52514e;
+  --text-muted:     #82817b;
+  --series-1:       #2a78d6;
+  --series-2:       #eb6834;
+  --series-3:       #1baf7a;
+  --grid:           #e8e7e2;
+  --accent-soft:    #eef4fc;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --surface:        #1a1a19;
+    --surface-raised: #232322;
+    --border:         #3a3a37;
+    --text-primary:   #ffffff;
+    --text-secondary: #c3c2b7;
+    --text-muted:     #8f8e85;
+    --series-1:       #3987e5;
+    --series-2:       #d95926;
+    --series-3:       #199e70;
+    --grid:           #2f2f2d;
+    --accent-soft:    #1e2733;
+  }
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  background: var(--surface);
+  color: var(--text-primary);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans TC",
+               "PingFang TC", "Microsoft JhengHei", sans-serif;
+  font-size: 17px;
+  line-height: 1.75;
+  -webkit-font-smoothing: antialiased;
+}
+.wrap { max-width: 760px; margin: 0 auto; padding: 0 24px 100px; }
+header { padding: 72px 0 40px; border-bottom: 1px solid var(--border); margin-bottom: 8px; }
+h1 { font-size: 2.1rem; line-height: 1.3; margin: 0 0 16px; letter-spacing: -0.02em; }
+.sub { font-size: 1.15rem; color: var(--text-secondary); margin: 0 0 24px; }
+.meta { font-size: 0.87rem; color: var(--text-muted); line-height: 1.8; }
+.meta a { color: var(--series-1); }
+h2 { font-size: 1.45rem; margin: 64px 0 8px; letter-spacing: -0.01em; }
+h3 { font-size: 1.05rem; margin: 32px 0 8px; }
+p { margin: 0 0 18px; }
+.lead { font-size: 1.05rem; color: var(--text-secondary); margin-bottom: 28px; }
+strong { font-weight: 650; }
+ul { padding-left: 22px; }
+li { margin-bottom: 10px; }
+code {
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  font-size: 0.88em; background: var(--surface-raised);
+  padding: 2px 6px; border-radius: 4px;
+}
+.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(148px, 1fr)); gap: 1px;
+         background: var(--border); border: 1px solid var(--border); border-radius: 10px;
+         overflow: hidden; margin: 28px 0; }
+.tile { background: var(--surface); padding: 20px 18px; }
+.tile .n { font-size: 1.7rem; font-weight: 680; letter-spacing: -0.02em; line-height: 1.15;
+           font-variant-numeric: tabular-nums; }
+.tile .l { font-size: 0.82rem; color: var(--text-muted); margin-top: 6px; }
+figure { margin: 34px 0; }
+figure svg { width: 100%; height: auto; display: block; overflow: visible; }
+figcaption { font-size: 0.85rem; color: var(--text-muted); margin-top: 16px; line-height: 1.65; }
+.axis-label { font-size: 11px; fill: var(--text-muted); }
+.bar-label { font-size: 12px; fill: var(--text-secondary); font-variant-numeric: tabular-nums; }
+.bar-name  { font-size: 12.5px; fill: var(--text-primary); }
+.gridline  { stroke: var(--grid); stroke-width: 1; }
+.callout {
+  background: var(--accent-soft); border-left: 3px solid var(--series-1);
+  padding: 18px 22px; margin: 30px 0; border-radius: 0 8px 8px 0;
+}
+.callout p:last-child { margin-bottom: 0; }
+.callout .k { font-size: 0.78rem; letter-spacing: 0.06em;
+              color: var(--series-1); font-weight: 680; display: block; margin-bottom: 6px; }
+.tw { overflow-x: auto; margin: 24px 0; }
+table { border-collapse: collapse; width: 100%; font-size: 0.92rem; }
+th, td { text-align: left; padding: 10px 14px; border-bottom: 1px solid var(--border); }
+th { font-weight: 620; color: var(--text-secondary); font-size: 0.85rem; }
+td.num { text-align: right; font-variant-numeric: tabular-nums; }
+tbody tr:hover { background: var(--surface-raised); }
+footer { margin-top: 80px; padding-top: 28px; border-top: 1px solid var(--border);
+         font-size: 0.87rem; color: var(--text-muted); }
+footer a { color: var(--series-1); }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <h1>在一台桌機上處理 5.71 億筆評論</h1>
+  <p class="sub">對完整的 Amazon Reviews 2023 建立兩階段推薦系統的過程紀錄——
+  以及三個我原本猜錯、被量測糾正的地方。</p>
+  <p class="meta">
+    資料來源：<a href="https://amazon-reviews-2023.github.io/">Amazon Reviews 2023</a>，McAuley Lab, UCSD ·
+    執行環境：Intel i5-14500、64 GB 記憶體、<strong>無 GPU</strong> ·
+    <a href="https://github.com/mina201199/amazon-recsys-571m">原始碼</a><br>
+    本頁所有數字皆由程式實測後寫入，非估計值。
+  </p>
+</header>
+
+<h2>要解決什麼</h2>
+<p class="lead">給定一位使用者過去買過什麼，預測他接下來會買什麼——
+就是 Amazon 首頁「為你推薦」在做的事。</p>
+
+<p>難處不在演算法，在規模：</p>
+
+<div class="tiles">
+  <div class="tile"><div class="n">4819 萬</div><div class="l">個商品可選</div></div>
+  <div class="tile"><div class="n">5451 萬</div><div class="l">位使用者</div></div>
+  <div class="tile"><div class="n">5.71 億</div><div class="l">筆歷史互動</div></div>
+  <div class="tile"><div class="n">10 個</div><div class="l">最終要推薦的數量</div></div>
+</div>
+
+<p>對 4819 萬個商品逐一打分是不可能的。這份報告記錄的是：把這件事做出來的過程中，
+哪些直覺是對的、哪些被資料推翻。</p>
+
+<h2>意外一：這題目在單一類別裡做不成</h2>
+
+<p>資料集分成 33 個類別。合理的開發順序是先拿最小的類別（美妝，70 萬筆）試跑流程，
+確認沒問題再擴大。結果評估集只剩 <strong>37 位</strong>使用者。</p>
+
+<p>原因是 next-item 預測需要使用者至少有兩筆互動——一筆當輸入、一筆當答案。
+而在單一類別內，<strong>92.3% 的人只買過一次</strong>。</p>
+
+<figure>
+<svg viewBox="0 0 700 195" role="img" aria-label="單一類別與全量的使用者稀疏度對比">
+  <text x="0" y="14" class="bar-name" font-weight="650">只有 1 筆互動的使用者比例</text>
+  <g><title>單一類別：92.3%</title>
+    <text x="0" y="52" class="bar-name">單一類別</text>
+    <rect x="112" y="38" width="500" height="22" rx="4" fill="var(--grid)"/>
+    <rect x="112" y="38" width="461.5" height="22" rx="4" fill="var(--series-2)"/>
+    <text x="584" y="54" class="bar-label" font-weight="680" fill="var(--series-2)">92.3%</text>
+  </g>
+  <g><title>全量 33 類：19.2%</title>
+    <text x="0" y="94" class="bar-name">全量 33 類</text>
+    <rect x="112" y="80" width="500" height="22" rx="4" fill="var(--grid)"/>
+    <rect x="112" y="80" width="96" height="22" rx="4" fill="var(--series-1)"/>
+    <text x="220" y="96" class="bar-label" font-weight="680" fill="var(--series-1)">19.2%</text>
+  </g>
+  <line x1="0" y1="126" x2="700" y2="126" stroke="var(--border)"/>
+  <text x="0" y="152" class="bar-name" font-weight="650">可用於評估的使用者數</text>
+  <text x="0" y="180" class="bar-label" fill="var(--series-2)">單一類別
+    <tspan font-size="16" font-weight="680">37 位</tspan></text>
+  <text x="290" y="180" class="bar-label" fill="var(--series-1)">全量
+    <tspan font-size="16" font-weight="680">1,110,743 位</tspan></text>
+</svg>
+<figcaption>差距來自使用者的購買散落在不同類別。合併全部 33 類後，
+平均每人互動數從 1.15 筆升到 10.36 筆。</figcaption>
+</figure>
+
+<div class="callout">
+  <span class="k">這改變了什麼</span>
+  <p>「做全量」原本只是規模上的偏好，現在變成<strong>方法上的必要條件</strong>——
+  不合併全部類別，這個題目根本無法評估。這也讓後面所有為了跑全量而付出的工程成本
+  有了正當理由，而不只是為了讓數字好看。</p>
+</div>
+
+<h2>意外二：慢的不是演算法，是記憶體</h2>
+
+<p>全量轉檔跑了 <strong>75 分鐘仍未完成</strong>，暫存檔溢寫到磁碟 73 GB。
+我判斷是去重用的視窗函數太慢——它需要對 5.71 億列做全域排序，而排序鍵是 28 字元的字串。
+準備改寫成雜湊聚合。</p>
+
+<p>改之前先做了基準測試。結果推翻了這個假設：</p>
+
+<figure>
+<svg viewBox="0 0 700 200" role="img" aria-label="三種去重做法的耗時比較">
+  <text x="0" y="12" class="axis-label">2950 萬列的去重耗時（秒），越短越好</text>
+  <line x1="248" y1="24" x2="248" y2="162" class="gridline"/>
+  <line x1="396" y1="24" x2="396" y2="162" class="gridline"/>
+  <line x1="544" y1="24" x2="544" y2="162" class="gridline"/>
+  <line x1="692" y1="24" x2="692" y2="162" class="gridline"/>
+  <line x1="100" y1="162" x2="692" y2="162" stroke="var(--border)"/>
+  <text x="248" y="180" class="axis-label" text-anchor="middle">5</text>
+  <text x="396" y="180" class="axis-label" text-anchor="middle">10</text>
+  <text x="544" y="180" class="axis-label" text-anchor="middle">15</text>
+  <text x="692" y="180" class="axis-label" text-anchor="middle">20</text>
+
+  <g><title>視窗函數（原做法）：3.6 秒</title>
+    <text x="0" y="48" class="bar-name">視窗函數</text>
+    <rect x="100" y="34" width="107" height="20" rx="4" fill="var(--series-1)"/>
+    <text x="217" y="49" class="bar-label" font-weight="680">3.6 s</text>
+    <text x="262" y="49" class="bar-label">← 原做法，最快</text>
+  </g>
+  <g><title>GROUP BY 雜湊聚合：9.3 秒</title>
+    <text x="0" y="90" class="bar-name">GROUP BY</text>
+    <rect x="100" y="76" width="275" height="20" rx="4" fill="var(--series-2)"/>
+    <text x="385" y="91" class="bar-label" font-weight="680">9.3 s</text>
+    <text x="430" y="91" class="bar-label">慢 2.6 倍</text>
+  </g>
+  <g><title>先整數編碼再 GROUP BY：22.2 秒</title>
+    <text x="0" y="132" class="bar-name">編碼後 GROUP BY</text>
+    <rect x="100" y="118" width="657" height="20" rx="4" fill="var(--series-2)" opacity="0.6"/>
+    <text x="560" y="110" class="bar-label" font-weight="680">22.2 s　慢 6 倍</text>
+  </g>
+</svg>
+<figcaption>三種做法的結果列數完全一致（29,139,329 列），是公平比較。
+我提議的「修正」反而慢 2.6 到 6 倍——去重根本不是瓶頸。</figcaption>
+</figure>
+
+<p>真正的原因要量測記憶體才看得出來。那張存放解析結果的暫存表，每列佔用
+<strong>85.5 bytes</strong>（28 字元的字串 ID 是主因）：</p>
+
+<figure>
+<svg viewBox="0 0 700 120" role="img" aria-label="暫存表記憶體用量與上限的對比">
+  <text x="0" y="12" class="axis-label">暫存表記憶體用量　vs　48 GB 上限</text>
+  <rect x="0" y="26" width="696" height="34" rx="5" fill="var(--grid)"/>
+  <rect x="0" y="26" width="660" height="34" rx="5" fill="var(--series-2)"/>
+  <text x="648" y="48" class="bar-label" text-anchor="end" fill="#ffffff" font-weight="680">45.5 GB</text>
+  <line x1="696" y1="18" x2="696" y2="68" stroke="var(--text-primary)" stroke-width="2"/>
+  <text x="696" y="84" class="axis-label" text-anchor="end">記憶體上限 48 GB</text>
+  <text x="0" y="108" class="bar-label">暫存表一個人吃掉
+    <tspan font-weight="680" fill="var(--series-2)">95%</tspan>
+    的記憶體預算，後續每個運算只剩 2.5 GB，只能全部溢寫到磁碟。</text>
+</svg>
+<figcaption>問題不在演算法，在於那張表根本不該進記憶體。</figcaption>
+</figure>
+
+<p>改成中間以 Parquet 落地——解析直接串流寫出、不建記憶體表；映射表從欄式檔案讀取，
+只掃需要的那一欄——全量轉檔在 <strong>30.8 分鐘</strong>內完成，溢寫從 73 GB 降到 37 GB。</p>
+
+<div class="callout">
+  <span class="k">最後的取捨</span>
+  <p>階段三最終<em>仍然</em>改用 <code>GROUP BY</code>，但理由與最初的猜測完全不同：
+  不是因為它比較快（量測顯示它較慢），而是<strong>視窗函數的記憶體上界由輸入決定，
+  而 <code>GROUP BY</code> 的由輸出決定</strong>。輸入遠大於記憶體時，只有後者跑得完。</p>
+</div>
+
+<h2>資料長什麼樣</h2>
+
+<figure>
+<svg viewBox="0 0 700 250" role="img" aria-label="使用者互動筆數分布">
+  <text x="0" y="14" class="axis-label">使用者互動筆數分布（共 5451 萬位）</text>
+  <line x1="60" y1="212" x2="692" y2="212" stroke="var(--border)"/>
+  <g><title>1 筆：10,481,284 位（19.2%）</title>
+    <rect x="96" y="97" width="76" height="115" rx="4" fill="var(--series-2)"/>
+    <text x="134" y="88" class="bar-label" text-anchor="middle" font-weight="680">19.2%</text>
+    <text x="134" y="232" class="bar-name" text-anchor="middle">1 筆</text></g>
+  <g><title>2-4 筆：17,823,489 位（32.7%）</title>
+    <rect x="216" y="16" width="76" height="196" rx="4" fill="var(--series-1)"/>
+    <text x="254" y="7" class="bar-label" text-anchor="middle" font-weight="680">32.7%</text>
+    <text x="254" y="232" class="bar-name" text-anchor="middle">2–4</text></g>
+  <g><title>5-9 筆：11,841,175 位（21.7%）</title>
+    <rect x="336" y="82" width="76" height="130" rx="4" fill="var(--series-1)"/>
+    <text x="374" y="73" class="bar-label" text-anchor="middle" font-weight="680">21.7%</text>
+    <text x="374" y="232" class="bar-name" text-anchor="middle">5–9</text></g>
+  <g><title>10-49 筆：12,583,905 位（23.1%）</title>
+    <rect x="456" y="74" width="76" height="138" rx="4" fill="var(--series-1)"/>
+    <text x="494" y="65" class="bar-label" text-anchor="middle" font-weight="680">23.1%</text>
+    <text x="494" y="232" class="bar-name" text-anchor="middle">10–49</text></g>
+  <g><title>50 筆以上：1,784,411 位（3.3%）</title>
+    <rect x="576" y="192" width="76" height="20" rx="4" fill="var(--series-1)"/>
+    <text x="614" y="183" class="bar-label" text-anchor="middle" font-weight="680">3.3%</text>
+    <text x="614" y="232" class="bar-name" text-anchor="middle">50+</text></g>
+</svg>
+<figcaption>中位數 4 筆、P90 為 23 筆、最活躍的一位有 18,397 筆。
+橘色是無法用於 next-item 評估的族群。</figcaption>
+</figure>
+
+<p>商品端則是典型的長尾：<strong>最熱門 1% 的商品（48 萬個）佔了 47.8% 的互動</strong>，
+而 48.6% 的商品一輩子只被買過一次。這是為什麼「覆蓋率」必須和 Recall 一起看——
+一個只推熱門商品的模型，Recall 可以不難看，商業上卻毫無價值。</p>
+
+<h2>系統怎麼組成</h2>
+
+<p>對 4819 萬個商品逐一打分不可行，所以分兩階段——這是 YouTube、Pinterest 等
+實際採用的架構：</p>
+
+<div class="tw">
+<table>
+  <thead><tr><th>階段</th><th>做什麼</th><th>為什麼</th></tr></thead>
+  <tbody>
+    <tr><td><strong>① 召回</strong></td><td>4819 萬 → 約 500 個候選</td>
+        <td>用便宜的統計方法（共現、矩陣分解、熱度）大幅縮小範圍</td></tr>
+    <tr><td><strong>② 排序</strong></td><td>500 個 → 10 個</td>
+        <td>用昂貴的模型精排，只在已縮小的候選上付出這個成本</td></tr>
+  </tbody>
+</table>
+</div>
+
+<p><strong>召回層的 Recall@500 是整個系統的天花板</strong>：召回沒撈到的商品，
+排序層再強也救不回來。所以這個數字要先量、先做高，再去碰排序層。</p>
+
+<h2 id="results">目前的結果</h2>
+
+<p>以下為驗證段（2023-03 至 2023-06）上、21,317 位使用者的實測結果。
+特徵只使用 2023-03-01 之前的資料——這個限制由程式強制，而非靠自律。</p>
+
+<div id="results-block">
+<p class="lead">召回層各通道的評估仍在執行中，數字產出後會寫入本區塊。</p>
+</div>
+
+<h2>這份分析的邊界</h2>
+
+<p>該講清楚的限制：</p>
+
+<ul>
+  <li><strong>評論不等於購買。</strong>資料集只包含留下評論的互動，買了沒評論的看不到。
+  這會讓習慣寫評論的使用者被過度代表。</li>
+  <li><strong>只用行為，不用文字。</strong>評論內容（平均 173 字元）完全未使用。
+  這是刻意的範圍取捨，不是資料不存在。</li>
+  <li><strong>沒有線上驗證。</strong>所有數字都來自離線的歷史資料重放。
+  離線指標與真實點擊率、營收之間的關係，需要 A/B 測試才能確認。</li>
+  <li><strong>測試段較稀疏。</strong>2023-06 之後互動量明顯下降（驗證段 1106 萬筆
+  vs 測試段 304 萬筆），推測是資料集收集截止前的遞減尾巴。已確認測試段仍有
+  111 萬位合格使用者，統計上足夠。</li>
+</ul>
+
+<footer>
+  <p>所有數字由程式實測後寫入，報告中沒有任何手打的數值。
+  重跑 <code>scripts/</code> 下的管線即可重現。</p>
+  <p><a href="https://github.com/mina201199/amazon-recsys-571m">GitHub 原始碼與設計文件</a>　·　MIT 授權</p>
+</footer>
+
+</div>
+</body>
+</html>

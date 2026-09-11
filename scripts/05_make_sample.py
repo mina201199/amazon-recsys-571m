@@ -23,6 +23,9 @@ def _dir_size(p: Path) -> int:
 
 
 def main() -> int:
+    # 重導向到檔案時 stdout 會緩衝，長時間執行就看不到進度
+    sys.stdout.reconfigure(line_buffering=True)
+
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--fraction", type=float, default=0.05, help="抽樣比例（預設 0.05）")
     ap.add_argument("--seed", type=int, default=42)
