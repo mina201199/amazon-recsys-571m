@@ -86,6 +86,21 @@ figcaption { font-size: 0.85rem; color: var(--text-muted); margin-top: 16px; lin
 .callout p:last-child { margin-bottom: 0; }
 .callout .k { font-size: 0.78rem; letter-spacing: 0.06em;
               color: var(--series-1); font-weight: 680; display: block; margin-bottom: 6px; }
+/* 白話說明區塊：給非技術背景的讀者 */
+.plain {
+  background: var(--surface-raised); border: 1px solid var(--border);
+  padding: 22px 26px; margin: 36px 0; border-radius: 10px;
+}
+.plain p:last-child { margin-bottom: 0; }
+.plain .k { font-size: 0.78rem; letter-spacing: 0.06em; color: var(--series-3);
+            font-weight: 680; display: block; margin-bottom: 10px; }
+/* 行內術語解釋 */
+.gloss { color: var(--text-secondary); font-size: 0.94em; }
+.analogy {
+  border-left: 3px solid var(--series-3); padding: 2px 0 2px 18px;
+  margin: 22px 0; color: var(--text-secondary);
+}
+.analogy strong { color: var(--text-primary); }
 .tw { overflow-x: auto; margin: 24px 0; }
 table { border-collapse: collapse; width: 100%; font-size: 0.92rem; }
 th, td { text-align: left; padding: 10px 14px; border-bottom: 1px solid var(--border); }
@@ -112,6 +127,15 @@ footer a { color: var(--series-1); }
   </p>
 </header>
 
+<div class="plain">
+  <span class="k">先用白話說一次</span>
+  <p>你在 Amazon 買過東西之後，首頁會出現「為你推薦」。這份專案就是<strong>從零做出那個功能</strong>：
+  給我一個人過去買過什麼，我要猜出他接下來會買什麼。</p>
+  <p>難的地方是 Amazon 上有<strong>四千八百萬種商品</strong>。要從裡面挑 10 個推薦給你，
+  又不能真的一個一個去比對——那樣你打開網頁要等好幾分鐘。</p>
+  <p>這份報告記錄的是把這件事做出來的過程，特別是<strong>三個我原本想錯、後來被數據糾正的地方</strong>。</p>
+</div>
+
 <h2>要解決什麼</h2>
 <p class="lead">給定一位使用者過去買過什麼，預測他接下來會買什麼——
 就是 Amazon 首頁「為你推薦」在做的事。</p>
@@ -133,8 +157,10 @@ footer a { color: var(--series-1); }
 <p>資料集分成 33 個類別。合理的開發順序是先拿最小的類別（美妝，70 萬筆）試跑流程，
 確認沒問題再擴大。結果評估集只剩 <strong>37 位</strong>使用者。</p>
 
-<p>原因是 next-item 預測需要使用者至少有兩筆互動——一筆當輸入、一筆當答案。
-而在單一類別內，<strong>92.3% 的人只買過一次</strong>。</p>
+<p>原因很直接：要驗證「猜下一個」準不準，這個人至少要買過<strong>兩次</strong>——
+拿前面那次當線索，後面那次當答案。只買過一次的人，沒有答案可以對。</p>
+
+<p>而在單一類別內，<strong>92.3% 的人只買過一次</strong>。</p>
 
 <figure>
 <svg viewBox="0 0 700 195" role="img" aria-label="單一類別與全量的使用者稀疏度對比">
@@ -171,11 +197,21 @@ footer a { color: var(--series-1); }
 
 <h2>意外二：慢的不是演算法，是記憶體</h2>
 
-<p>全量轉檔跑了 <strong>75 分鐘仍未完成</strong>，暫存檔溢寫到磁碟 73 GB。
-我判斷是去重用的視窗函數太慢——它需要對 5.71 億列做全域排序，而排序鍵是 28 字元的字串。
-準備改寫成雜湊聚合。</p>
+<div class="analogy">
+  <p><strong>先建立一個畫面：</strong>電腦的「記憶體」像一張書桌，「硬碟」像地下室的倉庫。
+  東西攤在桌上處理很快；桌子不夠大就得一趟趟跑倉庫，速度差上百倍。</p>
+  <p>這台電腦的桌子是 64 GB。接下來的故事就是：<strong>我以為自己的方法笨，
+  結果是桌子被一疊沒必要的東西佔滿了。</strong></p>
+</div>
 
-<p>改之前先做了基準測試。結果推翻了這個假設：</p>
+<p>把 5.71 億筆原始資料整理成可用格式時，程式跑了 <strong>75 分鐘還沒完成</strong>，
+而且不斷把東西搬去「倉庫」暫放，累積了 73 GB。</p>
+
+<p>中間有一步是「去掉重複」——同一個人對同一件商品重複評論過，只留最早那一筆。
+我判斷是這一步用的計算方式太笨（它需要把 5.71 億筆資料<strong>全部排序</strong>一次，
+而排序的依據是一串 28 個字的英數編號，比對很慢），打算換成另一種做法。</p>
+
+<p>改之前先做了測試，同一份資料、三種寫法各跑一次。結果推翻了我的判斷：</p>
 
 <figure>
 <svg viewBox="0 0 700 200" role="img" aria-label="三種去重做法的耗時比較">
@@ -194,29 +230,32 @@ footer a { color: var(--series-1); }
   <text x="692" y="180" class="axis-label" text-anchor="middle">25</text>
 
   <g><title>視窗函數（原做法）：3.6 秒</title>
-    <text x="0" y="48" class="bar-name">視窗函數</text>
+    <text x="0" y="48" class="bar-name">做法 A（原本的）</text>
     <rect x="100" y="34" width="85" height="20" rx="4" fill="var(--series-1)"/>
     <text x="195" y="49" class="bar-label" font-weight="680">3.6 s</text>
     <text x="240" y="49" class="bar-label">← 原做法，最快</text>
   </g>
   <g><title>GROUP BY 雜湊聚合：9.3 秒</title>
-    <text x="0" y="90" class="bar-name">GROUP BY</text>
+    <text x="0" y="90" class="bar-name">做法 B</text>
     <rect x="100" y="76" width="220" height="20" rx="4" fill="var(--series-2)"/>
     <text x="330" y="91" class="bar-label" font-weight="680">9.3 s</text>
     <text x="375" y="91" class="bar-label">慢 2.6 倍</text>
   </g>
   <g><title>先整數編碼再 GROUP BY：22.2 秒</title>
-    <text x="0" y="132" class="bar-name">編碼後 GROUP BY</text>
+    <text x="0" y="132" class="bar-name">做法 C</text>
     <rect x="100" y="118" width="526" height="20" rx="4" fill="var(--series-2)" opacity="0.6"/>
     <text x="636" y="133" class="bar-label" font-weight="680">22.2 s</text>
   </g>
 </svg>
-<figcaption>三種做法的結果列數完全一致（29,139,329 列），是公平比較。
-我提議的「修正」反而慢 2.6 到 6 倍——去重根本不是瓶頸。</figcaption>
+<figcaption>三種做法算出來的結果<strong>完全一樣</strong>（都是 29,139,329 筆），
+所以比的是純粹的速度差異。<br>
+我原本要換掉的做法 A 其實最快，我提議的「修正」反而慢 2.6 到 6 倍——
+<strong>去重根本不是問題所在</strong>。</figcaption>
 </figure>
 
-<p>真正的原因要量測記憶體才看得出來。那張存放解析結果的暫存表，每列佔用
-<strong>85.5 bytes</strong>（28 字元的字串 ID 是主因）：</p>
+<p>真正的原因要去量「桌子上到底放了什麼」才看得出來。程式為了方便，
+把整理到一半的 5.71 億筆資料<strong>全部攤在桌上</strong>。算一下每一筆佔多少空間，
+再乘以 5.71 億：</p>
 
 <figure>
 <svg viewBox="0 0 700 120" role="img" aria-label="暫存表記憶體用量與上限的對比">
@@ -226,21 +265,23 @@ footer a { color: var(--series-1); }
   <text x="648" y="48" class="bar-label" text-anchor="end" fill="#ffffff" font-weight="680">45.5 GB</text>
   <line x1="696" y1="18" x2="696" y2="68" stroke="var(--text-primary)" stroke-width="2"/>
   <text x="696" y="84" class="axis-label" text-anchor="end">記憶體上限 48 GB</text>
-  <text x="0" y="108" class="bar-label">暫存表一個人吃掉
+  <text x="0" y="108" class="bar-label">這一疊資料就佔掉
     <tspan font-weight="680" fill="var(--series-2)">95%</tspan>
-    的記憶體預算，後續每個運算只剩 2.5 GB，只能全部溢寫到磁碟。</text>
+    的桌面，後面每個步驟只剩一個角落可用，只好一直跑倉庫。</text>
 </svg>
-<figcaption>問題不在演算法，在於那張表根本不該進記憶體。</figcaption>
+<figcaption>問題不在計算方式笨，而在於<strong>那疊資料根本不該攤在桌上</strong>。</figcaption>
 </figure>
 
-<p>改成中間以 Parquet 落地——解析直接串流寫出、不建記憶體表；映射表從欄式檔案讀取，
-只掃需要的那一欄——全量轉檔在 <strong>30.8 分鐘</strong>內完成，溢寫從 73 GB 降到 37 GB。</p>
+<p>改法是：整理好的資料<strong>邊算邊寫進檔案</strong>，不要堆在桌上；
+需要用的時候再只讀需要的那幾欄。同樣的工作，全量在 <strong>30.8 分鐘</strong>內完成，
+跑倉庫的次數也從 73 GB 降到 37 GB。</p>
 
 <div class="callout">
   <span class="k">最後的取捨</span>
-  <p>階段三最終<em>仍然</em>改用 <code>GROUP BY</code>，但理由與最初的猜測完全不同：
-  不是因為它比較快（量測顯示它較慢），而是<strong>視窗函數的記憶體上界由輸入決定，
-  而 <code>GROUP BY</code> 的由輸出決定</strong>。輸入遠大於記憶體時，只有後者跑得完。</p>
+  <p>最後我<em>仍然</em>換成了做法 B，但理由和一開始的猜測完全不同：
+  不是因為它比較快（測試顯示它較慢），而是因為兩者<strong>佔桌面的方式不一樣</strong>——
+  做法 A 需要的桌面大小取決於<strong>輸入</strong>有多少筆，做法 B 取決於<strong>輸出</strong>有多少筆。
+  去重後資料少了很多，所以當輸入遠大於桌子時，只有做法 B 放得下。</p>
 </div>
 
 <h2>資料長什麼樣</h2>
@@ -281,8 +322,14 @@ footer a { color: var(--series-1); }
 
 <h2>系統怎麼組成</h2>
 
-<p>對 4819 萬個商品逐一打分不可行，所以分兩階段——這是 YouTube、Pinterest 等
-實際採用的架構：</p>
+<div class="analogy">
+  <p><strong>用徵才來比喻：</strong>一個職缺收到四千八百萬封履歷，你不可能每個人都面談三小時。
+  實務上會先用幾個條件快速篩掉絕大多數，留下幾百份，再對這幾百份仔細看。</p>
+  <p>推薦系統一模一樣：<strong>先用便宜的方法把四千八百萬縮到幾百個，再用貴的方法從這幾百個裡挑出最好的十個。</strong>
+  差別只在於「便宜」和「貴」指的是電腦的計算時間。</p>
+</div>
+
+<p>這就是兩階段架構，YouTube、Pinterest 等公司實際採用的也是同一套：</p>
 
 <div class="tw">
 <table>
@@ -301,8 +348,17 @@ footer a { color: var(--series-1); }
 
 <h2 id="results">目前的結果</h2>
 
-<p>以下為驗證段（2023-03 至 2023-06）上、21,317 位使用者的實測結果。
-特徵只使用 2023-03-01 之前的資料——這個限制由程式強制，而非靠自律。</p>
+<div class="analogy">
+  <p><strong>先解釋表格裡的欄位：</strong></p>
+  <p><strong>Recall@10</strong>＝推薦 10 個商品，裡面命中的比例。
+  <strong>Recall@500</strong>＝放寬到 500 個候選時的命中比例，代表「第一關篩選」的上限。<br>
+  <strong>覆蓋率</strong>＝這個模型總共推薦過幾種不同的商品。只會推同樣一百種商品的系統，
+  就算命中率好看，商業上也沒有價值——所以這欄要跟命中率一起看。</p>
+</div>
+
+<p>以下是實測結果：資料取 2023 年 3 月到 6 月這段期間、21,317 位使用者。
+模型只能看 3 月 1 日<strong>之前</strong>的資料，不准偷看之後發生的事——
+這個限制寫在程式裡強制執行，不是靠自己記得遵守。</p>
 
 <div class="tw">
 <table>
@@ -343,16 +399,23 @@ footer a { color: var(--series-1); }
 
 <h3>怎麼讀這些數字</h3>
 
-<p>絕對值看起來很低，但參照點是<strong>從 4819 萬個商品中猜中使用者接下來會買的
-那 2.26 個</strong>。隨機猜的期望值是 0.00000005 量級；熱門商品基線的 Recall@10
-是 0.0023，已經是隨機的四萬倍。</p>
+<p>0.0037 看起來很小，但要跟合理的參照點比。這個任務是
+<strong>從 4819 萬個商品中，猜中這個人接下來會買的那 2.26 個</strong>。</p>
 
-<p>這也是為什麼報告裡一定要有基線階梯——<strong>脫離基線談絕對值沒有意義</strong>。</p>
+<p>如果完全用猜的，命中率大約是 0.00000005——小數點後七個零。
+最簡單的「推薦全站最熱門商品」做法能到 0.0023，<strong>已經是亂猜的四萬倍</strong>；
+合併兩路後是 0.0037。</p>
+
+<p>所以報告一定要有「最笨的做法能到多少」當對照。
+<strong>脫離對照組談絕對數字沒有意義</strong>——這也是為什麼我把熱門商品那一列留在表格最上面，
+即使它讓我的模型看起來沒那麼厲害。</p>
 
 <h3>意外三：更大的候選圖，反而更差</h3>
 
-<p>共現通道原本的參數為了控制成本收得很緊。修掉一個效能瓶頸後，fit 只要 16 秒，
-於是我把參數放寬，預期召回會提升。結果相反：</p>
+<p>「共現」這一路的做法是統計<strong>「買了 A 的人也買了 B」</strong>。
+原本為了怕跑太久，我把統計範圍設得很窄（只看最近一年、每人只取最近 20 筆）。
+修掉一個效能問題後，這一步從十幾分鐘降到 16 秒，於是我把範圍放寬，
+預期能找到更多關聯、命中率提升。結果相反：</p>
 
 <div class="tw">
 <table>
@@ -370,12 +433,12 @@ footer a { color: var(--series-1); }
 
 <div class="callout">
   <span class="k">為什麼會這樣</span>
-  <p>合併採輪流交錯、兩路權重相等。共現放寬後產生大量較弱的候選，
-  這些候選在名單前段擠掉了熱門商品的候選。
-  <strong>限制不在圖的大小，在合併策略</strong>——要讓更大的圖發揮價值，
-  得先讓合併能依通道品質加權，而不是雨露均霑。</p>
-  <p>算了 15 倍的時間、圖大了 40 倍，結果更差。這是保留收緊參數的理由，
-  也是下一步該改合併層而非繼續調共現的理由。</p>
+  <p>兩路推薦是<strong>輪流出牌</strong>合併的：你一個、我一個，權重相等。
+  放寬範圍後，「共現」找到的關聯變多，但多出來的那些關聯比較薄弱——
+  而它們照樣輪流擠進名單前段，把原本更好的候選推掉了。</p>
+  <p><strong>問題不在找到的關聯不夠多，在合併的方式太天真。</strong>
+  算了 15 倍的時間、關聯多了 40 倍，結果反而更差。所以我保留原本收緊的設定，
+  而下一步該做的是讓合併懂得依品質加權，不是繼續放寬共現。</p>
 </div>
 
 <h3>還沒完成的</h3>
@@ -389,12 +452,12 @@ footer a { color: var(--series-1); }
 <p>該講清楚的限制：</p>
 
 <ul>
-  <li><strong>評論不等於購買。</strong>資料集只包含留下評論的互動，買了沒評論的看不到。
-  這會讓習慣寫評論的使用者被過度代表。</li>
-  <li><strong>只用行為，不用文字。</strong>評論內容（平均 173 字元）完全未使用。
-  這是刻意的範圍取捨，不是資料不存在。</li>
-  <li><strong>沒有線上驗證。</strong>所有數字都來自離線的歷史資料重放。
-  離線指標與真實點擊率、營收之間的關係，需要 A/B 測試才能確認。</li>
+  <li><strong>資料裡只有「有寫評論」的購買。</strong>買了東西但沒留評論的，
+  這份資料看不到。所以習慣寫評論的人會被過度代表，安靜的買家被低估。</li>
+  <li><strong>只看買了什麼，沒看評論寫了什麼。</strong>評論文字（平均 173 個字）
+  完全沒有使用。這是刻意的取捨——先把「買了什麼」這個訊號做好，不是資料不存在。</li>
+  <li><strong>沒有真人驗證過。</strong>所有數字都是拿歷史資料回頭模擬出來的。
+  推薦系統實際上線後會不會真的讓人多買，要做 A/B 測試才知道。</li>
   <li><strong>測試段較稀疏。</strong>2023-06 之後互動量明顯下降（驗證段 1106 萬筆
   vs 測試段 304 萬筆），推測是資料集收集截止前的遞減尾巴。已確認測試段仍有
   111 萬位合格使用者，統計上足夠。</li>
