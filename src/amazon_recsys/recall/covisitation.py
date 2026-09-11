@@ -33,6 +33,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 import numpy as np
+import pyarrow as pa
 
 from amazon_recsys.recall.base import PAD
 
@@ -125,14 +126,30 @@ class CoVisitationRecall:
             raise RuntimeError("尚未呼叫 fit()")
         con = self._con
 
-        con.execute("CREATE OR REPLACE TEMP TABLE query_hist (row_id INT, item_idx INT)")
-        rows = [(i, int(item)) for i, h in enumerate(histories) for item in h]
-        if rows:
-            con.executemany("INSERT INTO query_hist VALUES (?, ?)", rows)
-
         out = np.full((len(histories), k), PAD, dtype=np.int64)
-        if not rows:
+
+        # 攤平成兩個平行陣列，再以 Arrow 批次載入。
+        #
+        # 不用 executemany 逐列 INSERT：DuckDB 沒有批次路徑，
+        # 兩萬位使用者的歷史約 46 萬列，逐列寫入實測要十幾分鐘，
+        # 而批次載入是秒級。這裡的成本原本佔了整個評估的絕大部分。
+        row_ids: list[int] = []
+        items: list[int] = []
+        for i, h in enumerate(histories):
+            row_ids.extend([i] * len(h))
+            items.extend(int(x) for x in h)
+        if not row_ids:
             return out
+
+        query_hist = pa.table({
+            "row_id": pa.array(row_ids, pa.int32()),
+            "item_idx": pa.array(items, pa.int32()),
+        })
+        con.register("query_hist_arrow", query_hist)
+        con.execute(
+            "CREATE OR REPLACE TEMP TABLE query_hist AS SELECT * FROM query_hist_arrow"
+        )
+        con.unregister("query_hist_arrow")
 
         result = con.execute(f"""
             SELECT row_id, dst FROM (
