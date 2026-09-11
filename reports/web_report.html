@@ -304,9 +304,85 @@ footer a { color: var(--series-1); }
 <p>以下為驗證段（2023-03 至 2023-06）上、21,317 位使用者的實測結果。
 特徵只使用 2023-03-01 之前的資料——這個限制由程式強制，而非靠自律。</p>
 
-<div id="results-block">
-<p class="lead">召回層各通道的評估仍在執行中，數字產出後會寫入本區塊。</p>
+<div class="tw">
+<table>
+  <thead><tr><th>召回通道</th><th class="num">Recall@10</th><th class="num">Recall@500</th>
+             <th class="num">NDCG@10</th><th class="num">覆蓋率</th></tr></thead>
+  <tbody>
+    <tr><td>熱門商品（基線）</td><td class="num">0.0023</td><td class="num">0.0252</td>
+        <td class="num">0.0015</td><td class="num">0.0000</td></tr>
+    <tr><td>共現統計</td><td class="num">0.0027</td><td class="num">0.0062</td>
+        <td class="num">0.0020</td><td class="num">0.0012</td></tr>
+    <tr><td><strong>合併兩路</strong></td><td class="num"><strong>0.0037</strong></td>
+        <td class="num"><strong>0.0292</strong></td><td class="num"><strong>0.0023</strong></td>
+        <td class="num">0.0012</td></tr>
+  </tbody>
+</table>
 </div>
+
+<figure>
+<svg viewBox="0 0 700 150" role="img" aria-label="三種召回設定的 Recall@10 比較">
+  <text x="0" y="12" class="axis-label">Recall@10（越高越好）</text>
+  <line x1="150" y1="126" x2="692" y2="126" stroke="var(--border)"/>
+  <g><title>熱門商品基線：0.0023</title>
+    <text x="0" y="42" class="bar-name">熱門商品</text>
+    <rect x="150" y="28" width="337" height="20" rx="4" fill="var(--grid)"/>
+    <text x="497" y="43" class="bar-label">0.0023</text></g>
+  <g><title>共現統計：0.0027</title>
+    <text x="0" y="80" class="bar-name">共現統計</text>
+    <rect x="150" y="66" width="396" height="20" rx="4" fill="var(--series-3)"/>
+    <text x="556" y="81" class="bar-label">0.0027</text></g>
+  <g><title>合併兩路：0.0037，勝過任何單一通道</title>
+    <text x="0" y="118" class="bar-name" font-weight="650">合併兩路</text>
+    <rect x="150" y="104" width="542" height="20" rx="4" fill="var(--series-1)"/>
+    <text x="596" y="119" class="bar-label" fill="#ffffff" font-weight="680">0.0037</text></g>
+</svg>
+<figcaption>合併後勝過任何單一通道——多路召回的價值在這裡被證實：
+兩路各自撈到的東西不完全重疊。</figcaption>
+</figure>
+
+<h3>怎麼讀這些數字</h3>
+
+<p>絕對值看起來很低，但參照點是<strong>從 4819 萬個商品中猜中使用者接下來會買的
+那 2.26 個</strong>。隨機猜的期望值是 0.00000005 量級；熱門商品基線的 Recall@10
+是 0.0023，已經是隨機的四萬倍。</p>
+
+<p>這也是為什麼報告裡一定要有基線階梯——<strong>脫離基線談絕對值沒有意義</strong>。</p>
+
+<h3>意外三：更大的候選圖，反而更差</h3>
+
+<p>共現通道原本的參數為了控制成本收得很緊。修掉一個效能瓶頸後，fit 只要 16 秒，
+於是我把參數放寬，預期召回會提升。結果相反：</p>
+
+<div class="tw">
+<table>
+  <thead><tr><th></th><th class="num">收緊參數</th><th class="num">放寬參數</th></tr></thead>
+  <tbody>
+    <tr><td>鄰居圖邊數</td><td class="num">455,842</td><td class="num">18,538,480</td></tr>
+    <tr><td>有鄰居的商品</td><td class="num">116,485</td><td class="num">1,727,364</td></tr>
+    <tr><td>共現自己的 Recall@500</td><td class="num">0.0062</td><td class="num">0.0126 ↑</td></tr>
+    <tr><td><strong>合併後 Recall@10</strong></td><td class="num"><strong>0.0037</strong></td>
+        <td class="num"><strong>0.0028 ↓</strong></td></tr>
+    <tr><td>fit 耗時</td><td class="num">16.3 s</td><td class="num">239.7 s</td></tr>
+  </tbody>
+</table>
+</div>
+
+<div class="callout">
+  <span class="k">為什麼會這樣</span>
+  <p>合併採輪流交錯、兩路權重相等。共現放寬後產生大量較弱的候選，
+  這些候選在名單前段擠掉了熱門商品的候選。
+  <strong>限制不在圖的大小，在合併策略</strong>——要讓更大的圖發揮價值，
+  得先讓合併能依通道品質加權，而不是雨露均霑。</p>
+  <p>算了 15 倍的時間、圖大了 40 倍，結果更差。這是保留收緊參數的理由，
+  也是下一步該改合併層而非繼續調共現的理由。</p>
+</div>
+
+<h3>還沒完成的</h3>
+
+<p>ALS 矩陣分解通道已實作並通過測試，但尚未在全量資料上執行——
+5451 萬使用者的 Cholesky 求解成本需要另外規劃。排序層（LightGBM）
+同樣已有設計但尚未接上。這兩項是明確的下一步，不是被遺忘的部分。</p>
 
 <h2>這份分析的邊界</h2>
 

@@ -32,9 +32,13 @@ from amazon_recsys.recall.popularity import PopularityRecall
 
 CHANNELS = {
     "popularity": lambda k: PopularityRecall(window_days=90, pool_size=max(2000, k * 4)),
-    # 全量規模下的參數：自連接成本是每人歷史長度的平方，
-    # max_items_per_user 從 50 收到 20 可把冪律使用者的貢獻從 2450 對降到 400 對。
-    # min_cooccurrence 提高到 3——資料量大時，出現兩次仍可能是巧合。
+    # 這組參數是量測選出來的，不是猜的。放寬版（1095 天 / 50 筆 / 門檻 2）
+    # 讓鄰居圖從 45.6 萬條邊長到 1854 萬條、fit 從 16 秒變成 240 秒，
+    # 但合併後的 Recall@10 反而從 0.0037 掉到 0.0028。
+    #
+    # 原因是合併採輪流交錯、兩路權重相等：共現放寬後產生大量較弱的候選，
+    # 在名單前段擠掉了熱門商品的候選。限制不在圖的大小，在合併策略——
+    # 要讓更大的圖發揮價值，得先讓合併能依通道品質加權。
     "covisitation": lambda k: CoVisitationRecall(
         window_days=365, max_items_per_user=20, top_n_neighbours=50, min_cooccurrence=3
     ),
