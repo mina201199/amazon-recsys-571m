@@ -17,8 +17,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
-from amazon_recsys import config  # noqa: E402
-from amazon_recsys.ingest import download  # noqa: E402
+from amazon_recsys import config
+from amazon_recsys.ingest import download
 
 
 def main() -> int:

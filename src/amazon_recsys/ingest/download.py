@@ -76,7 +76,7 @@ def remote_size(client: httpx.Client, url: str) -> int | None:
         r.raise_for_status()
         n = r.headers.get("content-length")
         return int(n) if n else None
-    except Exception:  # noqa: BLE001 — HEAD 失敗不應中斷下載，交由呼叫端處理
+    except Exception:
         return None
 
 
@@ -139,7 +139,7 @@ def _download_one(
                 raise OSError(f"大小不符：本機 {final} != 遠端 {total}")
             return Result(spec, "downloaded", written, total)
 
-        except Exception as e:  # noqa: BLE001 — 網路錯誤種類多，一律重試
+        except Exception as e:
             last_err = f"{type(e).__name__}: {e}"
             local = spec.dest.stat().st_size if spec.dest.exists() else 0
             if attempt < _MAX_RETRIES:

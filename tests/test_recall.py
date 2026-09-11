@@ -6,9 +6,9 @@ import duckdb
 import numpy as np
 import pytest
 
+from amazon_recsys.evaluation import splits as S
 from amazon_recsys.recall import base
 from amazon_recsys.recall.popularity import PopularityRecall
-from amazon_recsys.evaluation import splits as S
 
 
 # --------------------------------------------------------------------------

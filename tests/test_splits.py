@@ -60,7 +60,7 @@ def test_train_segment_cannot_be_evaluated(con):
 # 評估集建構
 # --------------------------------------------------------------------------
 def test_eval_set_selects_only_qualifying_users(con):
-    users, hists, truths = S.build_eval_set(con, "inter", SPLIT, segment="test")
+    users, _, truths = S.build_eval_set(con, "inter", SPLIT, segment="test")
     assert users == [0], "只有使用者 0 同時具備歷史與測試段的新商品"
     assert truths == [{11}]
 
@@ -78,7 +78,7 @@ def test_history_never_contains_future_data(con):
     """結構性保證：歷史中的任何互動都必須早於 cutoff。"""
     cutoff = SPLIT.feature_cutoff("test")
     users, hists, _ = S.build_eval_set(con, "inter", SPLIT, segment="test")
-    for uid, hist in zip(users, hists):
+    for uid, hist in zip(users, hists, strict=True):
         for item in hist:
             earliest = con.execute(
                 "SELECT min(ts) FROM inter WHERE user_idx = ? AND item_idx = ?",
