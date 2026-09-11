@@ -70,11 +70,20 @@ def build(
     con: duckdb.DuckDBPyConnection,
     categories: tuple[str, ...] | None = None,
     out_dir: Path | None = None,
+    maps_dir: Path | None = None,
 ) -> IngestStats:
-    """執行完整轉檔流程，回傳統計數字。"""
+    """執行完整轉檔流程，回傳統計數字。
+
+    映射表預設寫到 `out_dir` 的同層 `maps/`，而非固定位置。
+
+    這點攸關正確性：整數 ID 只有搭配產生它的那份映射表才有意義。
+    若互動表與映射表來自不同批資料，item_idx 會被解碼成完全不同的
+    商品——而且不會拋出任何錯誤，只會安靜地給出錯的結果。
+    把兩者綁在一起，這種錯配就無法發生。
+    """
     t0 = time.time()
     out_dir = out_dir or config.INTERACTIONS_DIR
-    maps_dir = config.MAPS_DIR
+    maps_dir = maps_dir or (out_dir.parent / "maps")
     out_dir.mkdir(parents=True, exist_ok=True)
     maps_dir.mkdir(parents=True, exist_ok=True)
 

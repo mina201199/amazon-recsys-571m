@@ -100,3 +100,31 @@ def test_mapping_is_deterministic(tmp_path):
     a = bi.build(con, categories=("Subscription_Boxes",), out_dir=tmp_path / "a")
     b = bi.build(con, categories=("Subscription_Boxes",), out_dir=tmp_path / "b")
     assert (a.n_users, a.n_items, a.kept_rows) == (b.n_users, b.n_items, b.kept_rows)
+
+
+def test_maps_are_written_next_to_their_interactions(tmp_path):
+    """映射表必須跟著它描述的互動表走，不可寫到固定位置。
+
+    整數 ID 只有搭配產生它的那份映射表才有意義。若兩者來自不同批
+    資料，item_idx 會被解碼成別的商品——而且不會拋錯，只會安靜地
+    給出錯的結果。把兩者綁在同一個父目錄，這種錯配就無法發生。
+    """
+    out = tmp_path / "run_a" / "interactions"
+    con = bi.connect(memory_limit="4GB")
+    bi.build(con, categories=("Subscription_Boxes",), out_dir=out)
+
+    maps = out.parent / "maps"
+    assert maps.is_dir(), "映射表沒有跟著互動表走"
+    assert {p.name for p in maps.glob("*.parquet")} == {
+        "user_map.parquet", "item_map.parquet", "category_map.parquet",
+    }
+
+
+def test_separate_runs_do_not_share_maps(tmp_path):
+    """兩次獨立的轉檔不可共用映射表目錄。"""
+    con = bi.connect(memory_limit="4GB")
+    for run in ("run_a", "run_b"):
+        bi.build(con, categories=("Subscription_Boxes",),
+                 out_dir=tmp_path / run / "interactions")
+    assert (tmp_path / "run_a" / "maps" / "user_map.parquet").exists()
+    assert (tmp_path / "run_b" / "maps" / "user_map.parquet").exists()

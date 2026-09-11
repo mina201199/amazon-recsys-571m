@@ -26,6 +26,8 @@ def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--categories", nargs="+", default=None, help="只處理指定類別")
     ap.add_argument("--out-dir", default=None, help="輸出目錄（預設為設定檔中的路徑）")
+    ap.add_argument("--maps-dir", default=None,
+                    help="映射表輸出目錄（預設為 out-dir 的同層 maps/）")
     ap.add_argument("--memory-limit", default="48GB", help="DuckDB 記憶體上限")
     args = ap.parse_args()
 
@@ -44,7 +46,8 @@ def main() -> int:
     print(f"執行緒 {config.N_THREADS}，記憶體上限 {args.memory_limit}\n")
 
     con = bi.connect(memory_limit=args.memory_limit)
-    st = bi.build(con, categories=cats, out_dir=out)
+    maps = Path(args.maps_dir) if args.maps_dir else None
+    st = bi.build(con, categories=cats, out_dir=out, maps_dir=maps)
 
     out_bytes = _dir_size(out)
     print("=== 轉檔結果 ===")
