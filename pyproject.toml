@@ -1,7 +1,7 @@
 [project]
 name = "amazon-recsys"
 version = "0.1.0"
-description = "Large-scale recommender system on 571M Amazon reviews (1996-2023)"
+description = "大規模推薦系統：5.71 億筆 Amazon 評論（1996-2023），單機端到端"
 readme = "README.md"
 requires-python = ">=3.12,<3.13"
 
