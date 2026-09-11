@@ -9,6 +9,10 @@
 ![Tests](https://img.shields.io/badge/tests-75%20passing-brightgreen)
 ![License](https://img.shields.io/badge/license-MIT-lightgrey)
 
+### 📊 [**互動式報告 →**](https://mina201199.github.io/amazon-recsys-571m/reports/web_report.html)
+
+一頁讀完整個專案：資料規模、三個被量測推翻的假設、系統架構與結果。
+
 ---
 
 ## 1. 解決什麼問題
