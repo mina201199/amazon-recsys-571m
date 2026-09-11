@@ -20,6 +20,9 @@ from amazon_recsys.evaluation import quality, splits
 
 
 def main() -> int:
+    # 重導向到檔案時 stdout 會緩衝，長時間執行就看不到進度
+    sys.stdout.reconfigure(line_buffering=True)
+
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--src", default=None, help="互動表 Parquet 目錄")
     ap.add_argument("--out", default=None, help="報告輸出路徑（.md）")
