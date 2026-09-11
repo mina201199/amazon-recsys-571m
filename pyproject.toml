@@ -44,3 +44,7 @@ target-version = "py312"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+pythonpath = ["src"]
+markers = [
+    "network: 需要連外網路的測試（uv run pytest -m 'not network' 可跳過）",
+]
