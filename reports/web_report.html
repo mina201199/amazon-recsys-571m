@@ -369,32 +369,45 @@ footer a { color: var(--series-1); }
         <td class="num">0.0015</td><td class="num">0.0000</td></tr>
     <tr><td>共現統計</td><td class="num">0.0027</td><td class="num">0.0062</td>
         <td class="num">0.0020</td><td class="num">0.0012</td></tr>
-    <tr><td><strong>合併兩路</strong></td><td class="num"><strong>0.0037</strong></td>
+    <tr><td>ALS 矩陣分解</td><td class="num">0.0012</td><td class="num">0.0104</td>
+        <td class="num">0.0011</td><td class="num">0.0001</td></tr>
+    <tr><td><strong>合併兩路</strong>（熱門＋共現）</td><td class="num"><strong>0.0037</strong></td>
         <td class="num"><strong>0.0292</strong></td><td class="num"><strong>0.0023</strong></td>
+        <td class="num">0.0012</td></tr>
+    <tr><td>合併三路（再加 ALS）</td><td class="num">0.0030 ↓</td>
+        <td class="num">0.0243 ↓</td><td class="num">0.0021</td>
         <td class="num">0.0012</td></tr>
   </tbody>
 </table>
 </div>
 
 <figure>
-<svg viewBox="0 0 700 150" role="img" aria-label="三種召回設定的 Recall@10 比較">
-  <text x="0" y="12" class="axis-label">Recall@10（越高越好）</text>
-  <line x1="150" y1="126" x2="692" y2="126" stroke="var(--border)"/>
+<svg viewBox="0 0 700 210" role="img" aria-label="五種召回設定的 Recall@10 比較">
+  <text x="0" y="12" class="axis-label">Recall@10（越高越好）· 長度依 0.0037 為滿格等比例</text>
+  <line x1="170" y1="186" x2="692" y2="186" stroke="var(--border)"/>
+  <g><title>ALS 矩陣分解：0.0012</title>
+    <text x="0" y="40" class="bar-name">ALS 矩陣分解</text>
+    <rect x="170" y="26" width="169" height="20" rx="4" fill="var(--grid)"/>
+    <text x="349" y="41" class="bar-label">0.0012</text></g>
   <g><title>熱門商品基線：0.0023</title>
-    <text x="0" y="42" class="bar-name">熱門商品</text>
-    <rect x="150" y="28" width="337" height="20" rx="4" fill="var(--grid)"/>
-    <text x="497" y="43" class="bar-label">0.0023</text></g>
+    <text x="0" y="76" class="bar-name">熱門商品</text>
+    <rect x="170" y="62" width="325" height="20" rx="4" fill="var(--grid)"/>
+    <text x="505" y="77" class="bar-label">0.0023</text></g>
   <g><title>共現統計：0.0027</title>
-    <text x="0" y="80" class="bar-name">共現統計</text>
-    <rect x="150" y="66" width="396" height="20" rx="4" fill="var(--series-3)"/>
-    <text x="556" y="81" class="bar-label">0.0027</text></g>
-  <g><title>合併兩路：0.0037，勝過任何單一通道</title>
-    <text x="0" y="118" class="bar-name" font-weight="650">合併兩路</text>
-    <rect x="150" y="104" width="542" height="20" rx="4" fill="var(--series-1)"/>
-    <text x="596" y="119" class="bar-label" fill="#ffffff" font-weight="680">0.0037</text></g>
+    <text x="0" y="112" class="bar-name">共現統計</text>
+    <rect x="170" y="98" width="381" height="20" rx="4" fill="var(--series-3)"/>
+    <text x="561" y="113" class="bar-label">0.0027</text></g>
+  <g><title>合併三路（含 ALS）：0.0030，比只合併兩路更差</title>
+    <text x="0" y="148" class="bar-name">合併三路</text>
+    <rect x="170" y="134" width="423" height="20" rx="4" fill="var(--series-2)"/>
+    <text x="603" y="149" class="bar-label">0.0030</text></g>
+  <g><title>合併兩路（熱門＋共現）：0.0037，最佳</title>
+    <text x="0" y="184" class="bar-name" font-weight="650">合併兩路</text>
+    <rect x="170" y="170" width="522" height="20" rx="4" fill="var(--series-1)"/>
+    <text x="596" y="185" class="bar-label" fill="#ffffff" font-weight="680">0.0037</text></g>
 </svg>
-<figcaption>合併後勝過任何單一通道——多路召回的價值在這裡被證實：
-兩路各自撈到的東西不完全重疊。</figcaption>
+<figcaption>合併兩路勝過任何單一通道——多路召回的價值在這裡成立。
+但<strong>再加入第三路（ALS）反而變差</strong>，原因見下。</figcaption>
 </figure>
 
 <h3>怎麼讀這些數字</h3>
@@ -410,7 +423,11 @@ footer a { color: var(--series-1); }
 <strong>脫離對照組談絕對數字沒有意義</strong>——這也是為什麼我把熱門商品那一列留在表格最上面，
 即使它讓我的模型看起來沒那麼厲害。</p>
 
-<h3>意外三：更大的候選圖，反而更差</h3>
+<h3>意外三：加得越多，反而越差</h3>
+
+<p>這一節有兩個各自獨立的實驗，最後指向同一個結論。</p>
+
+<h3>證據一：更大的候選圖</h3>
 
 <p>「共現」這一路的做法是統計<strong>「買了 A 的人也買了 B」</strong>。
 原本為了怕跑太久，我把統計範圍設得很窄（只看最近一年、每人只取最近 20 筆）。
@@ -437,9 +454,52 @@ footer a { color: var(--series-1); }
   放寬範圍後，「共現」找到的關聯變多，但多出來的那些關聯比較薄弱——
   而它們照樣輪流擠進名單前段，把原本更好的候選推掉了。</p>
   <p><strong>問題不在找到的關聯不夠多，在合併的方式太天真。</strong>
-  算了 15 倍的時間、關聯多了 40 倍，結果反而更差。所以我保留原本收緊的設定，
-  而下一步該做的是讓合併懂得依品質加權，不是繼續放寬共現。</p>
+  算了 15 倍的時間、關聯多了 40 倍，結果反而更差。</p>
 </div>
+
+<h3>證據二：加入第三種推薦方法</h3>
+
+<p>我另外實作了第三路：<strong>ALS 矩陣分解</strong>。它的想法是把每個人和每件商品
+都用一組數字描述（像「這個人偏好 3C、價格敏感」），再找出數字相近的配對。
+它能找到「沒有人同時買過，但品味相近」的商品——理論上和前兩路互補。</p>
+
+<p>訓練用了 1250 萬位使用者、1152 萬件商品，花了 18.6 分鐘。結果：</p>
+
+<div class="tw">
+<table>
+  <thead><tr><th>設定</th><th class="num">Recall@10</th><th class="num">Recall@500</th></tr></thead>
+  <tbody>
+    <tr><td>ALS 單獨</td><td class="num">0.0012</td><td class="num">0.0104</td></tr>
+    <tr><td><strong>合併兩路</strong>（熱門＋共現）</td>
+        <td class="num"><strong>0.0037</strong></td><td class="num"><strong>0.0292</strong></td></tr>
+    <tr><td>合併三路（再加 ALS）</td><td class="num">0.0030 ↓</td><td class="num">0.0243 ↓</td></tr>
+  </tbody>
+</table>
+</div>
+
+<p>ALS 自己的命中率是三路中最低的（0.0012，比最簡單的熱門商品還差）。
+而在輪流出牌的合併下，它照樣分到三分之一的名額，把更好的候選擠掉了。</p>
+
+<div class="callout">
+  <span class="k">兩個實驗，同一個結論</span>
+  <p>一個是把既有通道放寬、一個是加入全新通道，兩次都讓結果變差。
+  病因完全相同：<strong>合併是輪流出牌、權重相等，所以任何一路變弱或變吵，
+  都會直接稀釋最終名單。</strong></p>
+  <p>這比單一次觀察有力得多——兩條獨立的路徑指向同一個瓶頸，
+  代表<strong>限制真的在合併層，不是在任何一路的參數</strong>。
+  下一步該做的是讓合併依通道品質加權，而不是繼續調參或加通道。</p>
+</div>
+
+<h3>順帶一提：一個 53 分鐘的實作錯誤</h3>
+
+<p>ALS 產生推薦花了 <strong>53 分鐘</strong>，比訓練還久，這很不合理。
+查下去發現是我逐一使用者去比對全部 1152 萬件商品——
+兩萬位使用者就是 <strong>7.8 兆次運算</strong>，而且每次都重新走訪一遍整份資料。</p>
+
+<p>改成把所有使用者疊成一個矩陣、一次算完後，交給底層的數學函式庫處理。
+<strong>這不是演算法問題，是我沒有善用工具。</strong>
+量測的價值就在這裡——如果沒有把各步驟的耗時分開記錄，
+我只會覺得「ALS 本來就慢」，而不會發現慢的是自己寫的那三行。</p>
 
 <h3>還沒完成的</h3>
 
