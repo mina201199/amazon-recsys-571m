@@ -14,6 +14,7 @@ dependencies = [
     # --- 模型 ---
     "lightgbm>=4.5",        # 排序層 (LambdaRank)
     "implicit>=0.7.2",      # 召回層 ALS 矩陣分解
+    "threadpoolctl>=3.5",   # 限制 BLAS 執行緒，避免與 implicit 的平行搶佔
     "scipy>=1.14",          # 稀疏矩陣
     "numpy>=1.26",
 

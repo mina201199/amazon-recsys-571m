@@ -16,6 +16,7 @@ dependencies = [
     { name = "pyarrow" },
     { name = "pyyaml" },
     { name = "scipy" },
+    { name = "threadpoolctl" },
     { name = "tqdm" },
 ]
 
@@ -42,6 +43,7 @@ requires-dist = [
     { name = "pyyaml", specifier = ">=6.0" },
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.6" },
     { name = "scipy", specifier = ">=1.14" },
+    { name = "threadpoolctl", specifier = ">=3.5" },
     { name = "tqdm", specifier = ">=4.66" },
 ]
 provides-extras = ["dev"]
