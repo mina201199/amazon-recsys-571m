@@ -137,6 +137,9 @@ def build(
               AND parent_asin  IS NOT NULL
               AND timestamp    IS NOT NULL
               AND rating       IS NOT NULL
+              -- 全量實測有 151 筆評分落在 1-5 之外。數量微不足道，
+              -- 但留著會讓評分相關的特徵出現不可能的值。
+              AND rating BETWEEN 1 AND 5
               AND timestamp BETWEEN {_TS_MIN} AND {_TS_MAX}
         ) TO '{staging.as_posix()}'
         (FORMAT PARQUET, COMPRESSION ZSTD, PER_THREAD_OUTPUT true,
