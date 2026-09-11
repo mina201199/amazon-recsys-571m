@@ -101,7 +101,25 @@ Data lives outside the repository (`D:\amazon-reviews-2023\`) and is never commi
 uv sync --extra dev
 ```
 
-Requires Python 3.12. `uv` provisions the interpreter automatically.
+Requires Python 3.12; `uv` provisions the interpreter automatically. On Windows, set
+`PYTHONUTF8=1` — the default console encoding (cp950 on zh-TW systems) cannot render the
+project's output.
+
+## Development
+
+```bash
+uv run pytest -m "not network"    # fast suite, no downloads
+uv run pytest                     # includes live-download tests
+uv run ruff check src scripts tests
+```
+
+## Pipeline
+
+```bash
+uv run python scripts/01_download.py --what reviews     # 71.2 GB, resumable
+uv run python scripts/02_build_interactions.py          # jsonl.gz -> partitioned Parquet
+uv run python scripts/03_baseline.py                    # popularity baseline
+```
 
 ## Hardware used
 

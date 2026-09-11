@@ -14,8 +14,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
-from amazon_recsys import config  # noqa: E402
-from amazon_recsys.ingest import build_interactions as bi  # noqa: E402
+from amazon_recsys import config
+from amazon_recsys.ingest import build_interactions as bi
 
 
 def _dir_size(path: Path) -> int:

@@ -42,6 +42,28 @@ packages = ["src/amazon_recsys"]
 line-length = 100
 target-version = "py312"
 
+[tool.ruff.lint]
+# 明確選定規則，而非依賴預設值——預設值會隨 ruff 版本改變
+select = [
+    "E", "W",   # pycodestyle
+    "F",        # pyflakes
+    "I",        # import 排序
+    "UP",       # 現代化語法
+    "B",        # bugbear：常見陷阱
+    "SIM",      # 可簡化的寫法
+    "RUF",      # ruff 自有規則
+]
+ignore = [
+    # RUF001-003 會把中文全形標點（，。：（））標記為「模糊字元」。
+    # 該規則的用意是防範同形字攻擊（例如用西里爾字母 а 冒充拉丁 a），
+    # 但本專案的註解與文件以中文撰寫，全形標點是正當用法。
+    "RUF001", "RUF002", "RUF003",
+]
+
+[tool.ruff.lint.per-file-ignores]
+# 腳本需先調整 sys.path 才能匯入專案模組，匯入必然在頂層程式碼之後
+"scripts/*.py" = ["E402"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["src"]

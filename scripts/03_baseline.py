@@ -14,12 +14,12 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
-import duckdb  # noqa: E402
+import duckdb
 
-from amazon_recsys import config  # noqa: E402
-from amazon_recsys.evaluation import metrics as M  # noqa: E402
-from amazon_recsys.evaluation import splits as S  # noqa: E402
-from amazon_recsys.recall.popularity import PopularityRecall  # noqa: E402
+from amazon_recsys import config
+from amazon_recsys.evaluation import metrics as M
+from amazon_recsys.evaluation import splits as S
+from amazon_recsys.recall.popularity import PopularityRecall
 
 
 def main() -> int:
