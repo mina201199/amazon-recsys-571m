@@ -130,27 +130,39 @@ def build_eval_set(
         raise ValueError("訓練段不能當評估目標")
     cutoff = split.feature_cutoff(segment)
 
+    # 先決定要哪些使用者，再只為他們建立歷史陣列。
+    #
+    # 順序很重要：反過來寫（先為全部使用者建歷史、最後才抽樣）會對
+    # 5367 萬位使用者、5.5 億筆互動做 list 聚合，然後丟掉 99.9%。
+    # 先篩後建，工作量少好幾個數量級。
     sample = ""
     if max_users is not None:
         # hash 抽樣：同一 seed 下結果穩定，且不需要排序全表
-        sample = f"AND hash(h.user_idx * 2654435761 + {seed}) % 1000000 < {max_users}"
+        sample = f"AND hash(user_idx * 2654435761 + {seed}) % 1000000 < {max_users}"
 
     rows = con.execute(f"""
-        WITH hist AS (
+        WITH eligible AS (
+            -- 該段有互動、且抽樣命中的使用者
+            SELECT DISTINCT user_idx FROM {src}
+            WHERE ts >= {lo} AND ts < {hi} {sample}
+        ),
+        hist AS (
             SELECT user_idx, list(item_idx ORDER BY ts) AS history
             FROM {src} WHERE ts < {cutoff}
+              AND user_idx IN (SELECT user_idx FROM eligible)
             GROUP BY user_idx
         ),
         fut AS (
             SELECT user_idx, list(DISTINCT item_idx) AS future
             FROM {src} WHERE ts >= {lo} AND ts < {hi}
+              AND user_idx IN (SELECT user_idx FROM eligible)
             GROUP BY user_idx
         )
         SELECT h.user_idx, h.history,
                -- 排除已互動過的商品
                list_filter(f.future, x -> NOT list_contains(h.history, x)) AS truth
         FROM hist h JOIN fut f USING (user_idx)
-        WHERE length(h.history) >= {min_history} {sample}
+        WHERE length(h.history) >= {min_history}
     """).fetchall()
 
     users, histories, truths = [], [], []
