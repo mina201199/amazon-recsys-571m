@@ -75,3 +75,6 @@ $RECYCLE.BIN/
 .env
 .env.local
 config.local.toml
+
+# 個人面試筆記，不公開
+面試準備.md

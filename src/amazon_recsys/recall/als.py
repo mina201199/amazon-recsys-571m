@@ -137,17 +137,36 @@ class ALSRecall:
 
         item_factors = np.asarray(self._model.item_factors)   # (n_items, factors)
         out = np.full((len(histories), k), PAD, dtype=np.int64)
+        n_items = item_factors.shape[0]
 
+        # 先把所有使用者向量疊成一個矩陣，再一次做矩陣相乘。
+        #
+        # 原本的寫法是逐一使用者計算 item_factors @ vec。兩萬位使用者
+        # 乘上 1152 萬個商品、32 個因子，是 7.8 兆次運算，且每次都要
+        # 重新走訪整個因子矩陣——實測 recommend 花了 53 分鐘。
+        # 疊成矩陣後交給 BLAS 一次算完，記憶體與快取的利用率完全不同。
+        user_vecs = np.zeros((len(histories), item_factors.shape[1]), dtype=item_factors.dtype)
+        seen: list[list[int]] = []
         for u, hist in enumerate(histories):
             pos = [self._item_pos[i] for i in hist if i in self._item_pos]
-            if not pos:
-                continue
-            # 使用者向量 = 其歷史商品因子的平均（fold-in 的簡化形式）
-            vec = item_factors[pos].mean(axis=0)
-            scores = item_factors @ vec
-            scores[pos] = -np.inf                 # 排除已互動過的商品
-            top = np.argpartition(-scores, min(k, scores.size - 1))[:k]
-            top = top[np.argsort(-scores[top])]
-            valid = top[np.isfinite(scores[top])]
-            out[u, : valid.size] = self._item_index[valid]
+            seen.append(pos)
+            if pos:
+                # 使用者向量 = 其歷史商品因子的平均（fold-in 的簡化形式）
+                user_vecs[u] = item_factors[pos].mean(axis=0)
+
+        # 分批處理，避免一次配置 (n_users, n_items) 的分數矩陣
+        batch = max(1, min(len(histories), 8_000_000 // max(n_items, 1) or 1))
+        for start in range(0, len(histories), batch):
+            stop = min(start + batch, len(histories))
+            scores = user_vecs[start:stop] @ item_factors.T      # (batch, n_items)
+            for row in range(stop - start):
+                u = start + row
+                if not seen[u]:
+                    continue
+                s = scores[row]
+                s[seen[u]] = -np.inf                 # 排除已互動過的商品
+                top = np.argpartition(-s, min(k, s.size - 1))[:k]
+                top = top[np.argsort(-s[top])]
+                valid = top[np.isfinite(s[top])]
+                out[u, : valid.size] = self._item_index[valid]
         return out
