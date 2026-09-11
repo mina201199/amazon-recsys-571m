@@ -1,126 +1,137 @@
-# Large-Scale Recommender System on 571M Amazon Reviews
+# 大規模推薦系統：5.71 億筆 Amazon 評論
 
-Next-item recommendation over the full **Amazon Reviews 2023** dataset — 571.5M reviews,
-54.5M users, 48.2M items — trained end-to-end on a **single desktop machine**.
+在**單一桌機**上，對完整的 Amazon Reviews 2023 資料集（5.71 億筆評論、5451 萬使用者、
+4819 萬商品）建立端到端的推薦系統。無 GPU。
 
-> 中文設計文件：[`docs/specs/`](docs/specs/) ｜ **Status: work in progress**
+> 設計文件：[`docs/specs/`](docs/specs/) ｜ **狀態：開發中**
 
 ---
 
-## The problem
+## 要解決的問題
 
-> Given a user's interaction history, predict which items they will buy next.
+> **給定使用者過去的互動歷史，預測他接下來會買哪些商品。**
 
-Output is a ranked Top-10 list — the same task behind Amazon's "Recommended for you".
+輸出是排序過的 Top-10 推薦清單，也就是 Amazon 首頁「為你推薦」在做的事。
 
-## Why this is not a toy project
+## 為什麼這不是一個玩具專案
 
-Scoring all 48.2M items for every user is computationally impossible, so the system uses the
-**two-stage retrieval-and-ranking architecture** used in production systems at YouTube and Pinterest:
+對 4819 萬個商品逐一打分在計算上不可能，因此採用業界實際使用的
+**兩階段「召回 + 排序」架構**（YouTube、Pinterest 皆為同構）：
 
 ```
-user history ──▶ ① Candidate generation ──▶ ~500 candidates ──▶ ② Ranking ──▶ Top-10
-                    (48.2M → 500)                                 (LightGBM)
+使用者歷史 ──▶ ① 召回層 ──▶ 約 500 個候選 ──▶ ② 排序層 ──▶ Top-10
+                (4819萬 → 500)                  (LightGBM)
 ```
 
-| Stage | Method | Why |
+| 階段 | 方法 | 為什麼 |
 |---|---|---|
-| ① Retrieval | Co-visitation counts + ALS matrix factorisation + category popularity | Cheap, runs over the **full 571M interactions** |
-| ② Ranking | LightGBM (LambdaRank) on ~30 engineered features | Expensive, applied only to the shortlist |
+| ① 召回 | 共現統計 + ALS 矩陣分解 + 熱門商品 | 成本低，可以跑過**全量 5.71 億筆互動** |
+| ② 排序 | LightGBM（LambdaRank）搭配約 30 個特徵 | 成本高，只用在已篩選過的候選清單上 |
 
-**Recall@500 of the retrieval stage is the ceiling of the whole system** — no ranker can recover
-an item that retrieval never surfaced. It is measured and reported separately.
+**召回層的 Recall@500 是整個系統的天花板** —— 召回沒撈到的商品，排序層再強也救不回來。
+因此它被獨立量測與報告。
 
-## Dataset — measured, not estimated
+## 資料集：實測數字，不是估計
 
-All figures below were measured directly from the source (HTTP `HEAD` for sizes, downloads timed):
+以下數字全部直接從資料源量測（檔案大小用 HTTP `HEAD` 查詢，下載速度實際計時）：
 
 | | |
 |---|---|
-| Reviews | **571.54M** (May 1996 – Sep 2023) |
-| Users / Items | 54.51M / 48.19M |
-| Categories | 33 |
-| Raw review files | **71.2 GB** (34 × `.jsonl.gz`) |
-| Raw metadata files | **24.5 GB** |
-| Interactions table after column pruning + int encoding | **~4 GB** Parquet+ZSTD |
+| 評論總數 | **5.71 億筆**（1996-05 ~ 2023-09） |
+| 使用者 / 商品 | 5451 萬 / 4819 萬 |
+| 類別數 | 33 |
+| 原始評論檔 | **71.2 GB**（34 個 `.jsonl.gz`） |
+| 原始 metadata | **24.5 GB** |
+| 欄位裁剪 + 整數編碼後的互動表 | **約 5 GB**（Parquet + ZSTD，實測每列 9.4 bytes） |
 
-Source: [Amazon Reviews 2023](https://amazon-reviews-2023.github.io/), McAuley Lab, UCSD.
+資料來源：[Amazon Reviews 2023](https://amazon-reviews-2023.github.io/)，McAuley Lab, UCSD。
 
-## Engineering decisions
+> HuggingFace 頁面標示 750 GB，該數字應包含圖片等額外資源，與實際評論資料不符。
 
-**Single-node, not Spark.** The pruned interactions table compresses to ~4 GB against 64 GB of RAM.
-Introducing a distributed framework at this scale adds operational complexity with no benefit,
-so the pipeline uses DuckDB (out-of-core SQL) and Polars instead.
+## 工程決策
 
-**Integer ID encoding.** `user_id` is a 28-character string; storing it raw for 571M rows costs
-~16 GB. Mapping to `int32` cuts that to 2.3 GB and makes the full dataset memory-resident,
-reducing feature-experiment iteration time from minutes to seconds.
+**單機處理，不用 Spark。**
+裁剪後的互動表壓縮至約 5 GB，而機器有 64 GB 記憶體。在這個量級引入分散式框架
+只會增加維運複雜度而沒有效益，因此管線使用 DuckDB（可超出記憶體的 SQL）與 Polars。
 
-**`parent_asin`, not `asin`.** Colour and size variants of one product share a `parent_asin` but
-have distinct `asin`s. Keying on `asin` inflates the item count and dilutes the interaction signal
-per item — a subtle trap in this dataset.
+**ID 整數編碼。**
+`user_id` 是 28 字元字串，5.71 億列光存 ID 就要約 16 GB。映射成 `int32` 後降到 2.3 GB，
+讓全量資料能常駐記憶體，把特徵實驗的迭代時間從數十分鐘壓到秒級。
 
-**Strictly time-based splits.** Train on data before a cutoff, evaluate after it. Random splits
-let the model see the future and produce inflated, meaningless scores. Automated leakage checks
-assert that no feature is computed from post-cutoff data.
+**用 `parent_asin` 而非 `asin`。**
+同一商品的顏色與尺寸變體共用 `parent_asin`，但各有不同的 `asin`。
+以 `asin` 為鍵會虛增商品數並稀釋每個商品的互動訊號 —— 這是本資料集的隱藏陷阱。
 
-## Evaluation
+**嚴格按時間切分。**
+訓練用切分點之前的資料，評估用之後的。隨機切分會讓模型看到未來，
+產生虛高且無意義的分數。程式內建自動洩漏檢查，確保沒有任何特徵取用切分點之後的資料。
 
-Reported as a baseline ladder, so the contribution of each component is visible:
+**共現分數做熱度正規化。**
+原始共現次數會讓熱門商品獨占所有鄰居清單（熱門商品和什麼都共現）。
+分數除以兩商品熱度的幾何平均後，浮上來的才是「相對於各自熱度而言異常常一起出現」的配對。
 
-1. Random recommendations — floor
-2. **Global most-popular** — the baseline that actually has to be beaten
-3. Co-visitation retrieval + popularity ranking
+**ALS 過濾低互動使用者。**
+64 維因子下，每輪迭代對 5451 萬使用者做 Cholesky 求解約需 12 分鐘，15 輪就是 3 小時。
+過濾掉互動少於 5 筆的使用者同時解決成本與品質問題 —— 這類使用者的潛在向量本來就估不準。
+他們不會沒有推薦：評估時用商品因子 fold-in 反推向量，完全沒有歷史的則由熱門商品那一路接手。
+
+## 評估方式
+
+以**基線階梯**呈現，讓每個元件的貢獻看得見：
+
+1. 隨機推薦 —— 地板
+2. **全站最熱門商品** —— 真正必須打敗的對手
+3. 共現召回 + 熱度排序
 4. ALS
-5. Multi-channel retrieval + LightGBM ranking
+5. 多路召回 + LightGBM 精排
 
-Metrics: `Recall@10`, `NDCG@10`, plus **catalogue coverage** — a model that only ever recommends
-100 distinct items is useless regardless of its recall.
+指標：`Recall@10`、`NDCG@10`，以及**商品目錄覆蓋率** ——
+一個永遠只推同樣 100 種商品的模型，Recall 再高也毫無價值。
 
-Results are segmented by **cold-start vs. established users** and **head vs. long-tail items**,
-because an aggregate number hides exactly the cases that matter.
+結果會依**冷啟動與老使用者**、**熱門與長尾商品**分層報告，
+因為單一的總分數字，恰好會掩蓋最需要看清楚的那些情況。
 
-## Repository layout
+## 專案結構
 
 ```
 src/amazon_recsys/
-├── ingest/      # .jsonl.gz → partitioned Parquet, ID encoding
-├── recall/      # candidate generation (co-visitation, ALS, popularity)
-├── ranking/     # LightGBM ranker, feature engineering
-└── evaluation/  # metrics, leakage checks, baseline ladder
-scripts/         # runnable pipeline stages
-docs/specs/      # design documents (Chinese)
-reports/         # generated evaluation reports
+├── ingest/      # .jsonl.gz → 分區 Parquet、ID 編碼
+├── recall/      # 召回層（共現、ALS、熱門商品）
+├── ranking/     # LightGBM 排序模型、特徵工程
+└── evaluation/  # 指標、時間切分、洩漏檢查
+scripts/         # 可執行的管線各階段
+docs/specs/      # 設計文件
+reports/         # 產出的評估報告
 ```
 
-Data lives outside the repository (`D:\amazon-reviews-2023\`) and is never committed.
+資料存放於專案目錄之外（`D:\amazon-reviews-2023\`），永不進入版本控制。
 
-## Setup
+## 環境建置
 
 ```bash
 uv sync --extra dev
 ```
 
-Requires Python 3.12; `uv` provisions the interpreter automatically. On Windows, set
-`PYTHONUTF8=1` — the default console encoding (cp950 on zh-TW systems) cannot render the
-project's output.
+需要 Python 3.12，`uv` 會自動下載安裝。
+**Windows 使用者請設定 `PYTHONUTF8=1`** —— 預設主控台編碼（繁體中文系統為 cp950）
+無法輸出本專案的中文內容。
 
-## Development
+## 開發指令
 
 ```bash
-uv run pytest -m "not network"    # fast suite, no downloads
-uv run pytest                     # includes live-download tests
+uv run pytest -m "not network"    # 快速測試，不含下載
+uv run pytest                     # 包含實際下載的測試
 uv run ruff check src scripts tests
 ```
 
-## Pipeline
+## 執行管線
 
 ```bash
-uv run python scripts/01_download.py --what reviews     # 71.2 GB, resumable
-uv run python scripts/02_build_interactions.py          # jsonl.gz -> partitioned Parquet
-uv run python scripts/03_baseline.py                    # popularity baseline
+uv run python scripts/01_download.py --what reviews     # 71.2 GB，支援續傳
+uv run python scripts/02_build_interactions.py          # jsonl.gz → 分區 Parquet
+uv run python scripts/03_baseline.py                    # 熱門商品基線
 ```
 
-## Hardware used
+## 執行環境
 
-Intel i5-14500 (14C/20T), 64 GB RAM, ~600 GB free disk. No GPU.
+Intel i5-14500（14 核 / 20 執行緒）、64 GB 記憶體、約 600 GB 可用空間。無 GPU。
