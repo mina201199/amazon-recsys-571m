@@ -29,6 +29,8 @@ def main() -> int:
     ap.add_argument("--maps-dir", default=None,
                     help="映射表輸出目錄（預設為 out-dir 的同層 maps/）")
     ap.add_argument("--memory-limit", default="48GB", help="DuckDB 記憶體上限")
+    ap.add_argument("--keep-staging", action="store_true",
+                    help="保留階段 1 的中間 Parquet（除錯或重跑階段 2-3 用）")
     args = ap.parse_args()
 
     config.ensure_dirs()
@@ -47,7 +49,8 @@ def main() -> int:
 
     con = bi.connect(memory_limit=args.memory_limit)
     maps = Path(args.maps_dir) if args.maps_dir else None
-    st = bi.build(con, categories=cats, out_dir=out, maps_dir=maps)
+    st = bi.build(con, categories=cats, out_dir=out, maps_dir=maps,
+                  keep_staging=args.keep_staging)
 
     out_bytes = _dir_size(out)
     print("=== 轉檔結果 ===")
@@ -59,8 +62,11 @@ def main() -> int:
     print(f"  商品            {st.n_items:,}")
     print(f"  類別            {st.n_categories}")
     print(f"  時間範圍        {st.first_date} ~ {st.last_date}")
-    print(f"  耗時            {st.seconds:.1f} 秒 "
+    print(f"  總耗時          {st.seconds:.1f} 秒 "
           f"({st.raw_rows / max(st.seconds, 0.001):,.0f} 列/秒)")
+    print("  各階段耗時")
+    for name, sec in st.stage_seconds.items():
+        print(f"    {name:<16} {sec:8.1f} 秒 ({100 * sec / st.seconds:4.1f}%)")
     print()
     print("=== 壓縮效果 ===")
     print(f"  原始 .jsonl.gz  {config.human_bytes(src_bytes)}")
