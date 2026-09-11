@@ -1,0 +1,46 @@
+[project]
+name = "amazon-recsys"
+version = "0.1.0"
+description = "Large-scale recommender system on 571M Amazon reviews (1996-2023)"
+readme = "README.md"
+requires-python = ">=3.12,<3.13"
+
+dependencies = [
+    # --- 資料處理：核心 ---
+    "duckdb>=1.1",          # JSON 解析 + 超出記憶體的聚合，吃滿 20 執行緒
+    "polars>=1.0",          # 特徵工程的 DataFrame 操作
+    "pyarrow>=17.0",        # Parquet 讀寫
+
+    # --- 模型 ---
+    "lightgbm>=4.5",        # 排序層 (LambdaRank)
+    "implicit>=0.7.2",      # 召回層 ALS 矩陣分解
+    "scipy>=1.14",          # 稀疏矩陣
+    "numpy>=1.26",
+
+    # --- 工具 ---
+    "tqdm>=4.66",           # 進度條（下載與長時間任務要看得到進度）
+    "httpx>=0.27",          # 平行下載
+    "pyyaml>=6.0",          # 設定檔
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "ruff>=0.6",
+    "jupyterlab>=4.2",
+    "matplotlib>=3.9",      # 評估圖表
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/amazon_recsys"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
