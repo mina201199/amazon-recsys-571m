@@ -32,8 +32,11 @@ from amazon_recsys.recall.popularity import PopularityRecall
 
 CHANNELS = {
     "popularity": lambda k: PopularityRecall(window_days=90, pool_size=max(2000, k * 4)),
+    # 全量規模下的參數：自連接成本是每人歷史長度的平方，
+    # max_items_per_user 從 50 收到 20 可把冪律使用者的貢獻從 2450 對降到 400 對。
+    # min_cooccurrence 提高到 3——資料量大時，出現兩次仍可能是巧合。
     "covisitation": lambda k: CoVisitationRecall(
-        window_days=730, max_items_per_user=50, top_n_neighbours=100, min_cooccurrence=2
+        window_days=365, max_items_per_user=20, top_n_neighbours=50, min_cooccurrence=3
     ),
     "als": lambda k: ALSRecall(factors=64, iterations=15, min_user_interactions=5),
 }
