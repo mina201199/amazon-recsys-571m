@@ -104,3 +104,67 @@ def test_stats_reports_trained_size(con):
 def test_recommend_before_fit_raises():
     with pytest.raises(RuntimeError, match="fit"):
         ALSRecall().recommend([[1]], k=3)
+
+
+def test_fold_in_matches_normal_equations_and_blocked_search(con):
+    import numpy as np
+    import scipy.sparse as sp
+    from threadpoolctl import threadpool_limits
+
+    r = ALSRecall(factors=4, iterations=5, min_user_interactions=5,
+                  user_batch_size=2, item_block_size=3)
+    r.fit(con, "inter", cutoff=CUTOFF)
+    hists = [[1, 2], [10, 11], [9999], [], GROUP_A + GROUP_B]
+    y = r._model.item_factors.astype(np.float64)
+    expected = []
+    for hist in hists:
+        seen = [r._item_pos[i] for i in hist if i in r._item_pos]
+        if not seen:
+            expected.append([PAD] * 15)
+            continue
+        ys = y[seen]
+        matrix = y.T @ y + (r.alpha - 1) * (ys.T @ ys) + r.regularization * np.eye(4)
+        vec = np.linalg.solve(matrix, r.alpha * ys.sum(axis=0))
+        csr = sp.csr_matrix((np.ones(len(seen)), ([0] * len(seen), seen)),
+                            shape=(1, len(y)), dtype=np.float32)
+        with threadpool_limits(limits=1, user_api="blas"):
+            actual_vec = r._model.recalculate_user(0, csr)
+        np.testing.assert_allclose(actual_vec, vec, rtol=2e-3, atol=2e-4)
+        scores = y @ vec
+        scores[seen] = -np.inf
+        ids = [i for i in np.lexsort((r._item_index, -scores)) if np.isfinite(scores[i])]
+        top = r._item_index[ids[:15]].tolist()
+        expected.append(top + [PAD] * (15 - len(top)))
+    assert r.recommend(hists, k=15).tolist() == expected
+    assert r.recommend([], k=3).shape == (0, 3)
+
+
+def test_top_k_boundary_ties_are_global_id_ordered():
+    import numpy as np
+
+    from amazon_recsys.recall.als import _top_k
+
+    ids, scores = _top_k(np.array([9, 3, 7, 1]), np.array([2., 2., 2., -np.inf]), 2)
+    assert ids.tolist() == [3, 7]
+    assert scores.tolist() == [2., 2.]
+
+
+def test_large_catalogue_does_not_determine_user_batch_size():
+    import numpy as np
+
+    class Model:
+        def __init__(self):
+            self.item_factors = np.arange(30, dtype=np.float32).reshape(15, 2)
+            self.calls = []
+
+        def recalculate_user(self, users, interactions):
+            self.calls.append(len(users))
+            return np.ones((len(users), 2), dtype=np.float32)
+
+    r = ALSRecall(user_batch_size=3, item_block_size=4)
+    r._model = Model()
+    r._item_index = np.arange(15)
+    r._item_pos = {i: i for i in range(15)}
+    actual = r.recommend([[0]] * 5, 2)
+    assert r._model.calls == [3, 2]
+    assert actual.tolist() == [[14, 13]] * 5

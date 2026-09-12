@@ -1,27 +1,7 @@
-"""ALS 矩陣分解召回。
+"""Implicit ALS 召回：標準 fold-in 與使用者／商品雙向分塊精確 Top-K。
 
-共現召回只看得到「直接一起被買過」的商品。ALS 把使用者與商品投影到
-同一個低維空間，能找出沒有直接共現、但興趣結構相近的商品 ——
-兩路互補，這是多路召回的意義。
-
-## 必須先算的成本帳
-
-    互動矩陣      5451 萬使用者 × 4819 萬商品，5.71 億個非零元素
-    稀疏矩陣      約 4.8 GB                      -> 可行
-    潛在因子      64 維時使用者 14 GB + 商品 12 GB -> 26 GB，吃緊但可行
-    每輪迭代      5451 萬 × 64^3 的 Cholesky 求解 -> 約 12 分鐘/輪
-
-15 輪迭代要 3 小時，在只有幾週的專案裡不合理。
-
-## 解法：過濾低互動使用者
-
-`min_user_interactions` 預設為 5。這不是為了省時間而犧牲品質 ——
-兩者方向一致：只買過一兩樣東西的使用者，他的潛在向量本來就估不準，
-留在訓練集裡既拖慢求解又貢獻雜訊。
-
-被濾掉的使用者不會沒有推薦：評估時採 fold-in（用已訓練好的商品因子
-反推該使用者的向量），沒有歷史的則由熱門商品那一路接手。
-這正是多路召回的分工。
+以評論互動作隱式訊號，不把未互動視為明確負評。低互動門檻是成本與
+覆蓋率的取捨，是否提升品質需實驗驗證。線上低延遲仍需 ANN 或預計算。
 """
 
 from __future__ import annotations
@@ -48,6 +28,9 @@ class ALSRecall:
     min_item_interactions: int = 5
     window_days: int | None = None
     random_state: int = 42
+    user_batch_size: int = 64
+    item_block_size: int = 65_536
+    max_score_mb: float = 128.0  # 分數及 Top-K 暫存預算，不是整個模型的記憶體上限
     name: str = "als"
 
     _model: object | None = None
@@ -126,47 +109,70 @@ class ALSRecall:
         }
 
     def recommend(self, histories: list[list[int]], k: int) -> np.ndarray:
-        """以 fold-in 為每位使用者計算推薦。
+        """解固定商品因子的 ALS 正規方程，再分塊搜尋精確 Top-K。
 
-        不查訓練時的使用者因子，而是用其歷史商品的因子即時反推向量。
-        這樣被門檻濾掉的使用者一樣有推薦，也保證推薦只依賴
-        cutoff 之前的歷史。
+        implicit.recalculate_user 會使用訓練相同的 alpha 與 regularization。
+        不再以商品向量平均冒充 fold-in。未知歷史回傳 PAD，留給其他通道。
         """
+        from threadpoolctl import threadpool_limits
+
         if self._model is None:
             raise RuntimeError("尚未呼叫 fit()")
-
-        item_factors = np.asarray(self._model.item_factors)   # (n_items, factors)
+        if k < 1:
+            raise ValueError("k 必須至少為 1")
+        if self.user_batch_size < 1 or self.item_block_size < 1:
+            raise ValueError("batch/block size 必須至少為 1")
+        if not np.isfinite(self.max_score_mb) or self.max_score_mb <= 0:
+            raise ValueError("max_score_mb 必須為正有限值")
+        factors = np.asarray(self._model.item_factors)
+        n_items = len(factors)
         out = np.full((len(histories), k), PAD, dtype=np.int64)
-        n_items = item_factors.shape[0]
-
-        # 先把所有使用者向量疊成一個矩陣，再一次做矩陣相乘。
-        #
-        # 原本的寫法是逐一使用者計算 item_factors @ vec。兩萬位使用者
-        # 乘上 1152 萬個商品、32 個因子，是 7.8 兆次運算，且每次都要
-        # 重新走訪整個因子矩陣——實測 recommend 花了 53 分鐘。
-        # 疊成矩陣後交給 BLAS 一次算完，記憶體與快取的利用率完全不同。
-        user_vecs = np.zeros((len(histories), item_factors.shape[1]), dtype=item_factors.dtype)
-        seen: list[list[int]] = []
-        for u, hist in enumerate(histories):
-            pos = [self._item_pos[i] for i in hist if i in self._item_pos]
-            seen.append(pos)
-            if pos:
-                # 使用者向量 = 其歷史商品因子的平均（fold-in 的簡化形式）
-                user_vecs[u] = item_factors[pos].mean(axis=0)
-
-        # 分批處理，避免一次配置 (n_users, n_items) 的分數矩陣
-        batch = max(1, min(len(histories), 8_000_000 // max(n_items, 1) or 1))
-        for start in range(0, len(histories), batch):
-            stop = min(start + batch, len(histories))
-            scores = user_vecs[start:stop] @ item_factors.T      # (batch, n_items)
-            for row in range(stop - start):
-                u = start + row
-                if not seen[u]:
-                    continue
-                s = scores[row]
-                s[seen[u]] = -np.inf                 # 排除已互動過的商品
-                top = np.argpartition(-s, min(k, s.size - 1))[:k]
-                top = top[np.argsort(-s[top])]
-                valid = top[np.isfinite(s[top])]
-                out[u, : valid.size] = self._item_index[valid]
+        # 保留 4 倍空間供分數、選取索引及暫存；模型因子與輸出另計。
+        budget = max(1, int(self.max_score_mb * 1024**2) // (4 * factors.itemsize))
+        user_batch = min(self.user_batch_size, budget)
+        item_block = min(self.item_block_size, max(1, budget // user_batch))
+        for start in range(0, len(histories), user_batch):
+            hists = histories[start:start + user_batch]
+            seen = [sorted({self._item_pos[i] for i in h if i in self._item_pos})
+                    for h in hists]
+            indices = np.array([i for row in seen for i in row], dtype=np.int32)
+            indptr = np.concatenate(([0], np.cumsum([len(row) for row in seen])))
+            interactions = sp.csr_matrix(
+                (np.ones(len(indices), dtype=np.float32), indices, indptr),
+                shape=(len(hists), n_items),
+            )
+            with threadpool_limits(limits=1, user_api="blas"):
+                vectors = self._model.recalculate_user(np.arange(len(hists)), interactions)
+            best_scores = [np.empty(0, dtype=factors.dtype) for _ in hists]
+            best_items = [np.empty(0, dtype=np.int64) for _ in hists]
+            for left in range(0, n_items, item_block):
+                right = min(left + item_block, n_items)
+                scores = vectors @ factors[left:right].T
+                for row, known in enumerate(seen):
+                    if not known:
+                        continue
+                    excluded = [i - left for i in known if left <= i < right]
+                    scores[row, excluded] = -np.inf
+                    block_ids = self._item_index[left:right]
+                    ids, values = _top_k(block_ids, scores[row], k)
+                    best_items[row], best_scores[row] = _top_k(
+                        np.concatenate((best_items[row], ids)),
+                        np.concatenate((best_scores[row], values)), k,
+                    )
+            for row, ids in enumerate(best_items):
+                out[start + row, :len(ids)] = ids
         return out
+
+
+def _top_k(ids: np.ndarray, scores: np.ndarray, k: int) -> tuple[np.ndarray, np.ndarray]:
+    """有限分數的精確 Top-K；同分依全域 item ID，包含切分邊界的同分。"""
+    valid = np.flatnonzero(np.isfinite(scores))
+    if valid.size > k:
+        threshold = np.partition(scores[valid], valid.size - k)[valid.size - k]
+        above = valid[scores[valid] > threshold]
+        tied = valid[scores[valid] == threshold]
+        tied = tied[np.argsort(ids[tied])[:k - len(above)]]
+        valid = np.concatenate((above, tied))
+    order = np.lexsort((ids[valid], -scores[valid]))
+    chosen = valid[order]
+    return ids[chosen], scores[chosen]

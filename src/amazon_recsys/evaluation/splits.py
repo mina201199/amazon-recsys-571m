@@ -77,8 +77,7 @@ class TimeSplit:
         )
 
 
-# 預設切分（見 docs/specs/ §7.1）。資料集止於 2023-09-09，
-# 測試段終點設為 09-10 以完整涵蓋最後一天。
+# 固定歷史協定：09-10 是排他終點。品質報告到 09-14，最後四天未納入。
 DEFAULT_SPLIT = TimeSplit(
     train_end=ts("2023-03-01"),
     valid_end=ts("2023-06-01"),
@@ -130,24 +129,37 @@ def build_eval_set(
         raise ValueError("訓練段不能當評估目標")
     cutoff = split.feature_cutoff(segment)
 
-    # 先決定要哪些使用者，再只為他們建立歷史陣列。
-    #
-    # 順序很重要：反過來寫（先為全部使用者建歷史、最後才抽樣）會對
-    # 5367 萬位使用者、5.5 億筆互動做 list 聚合，然後丟掉 99.9%。
-    # 先篩後建，工作量少好幾個數量級。
-    sample = ""
-    if max_users is not None:
-        # hash 抽樣：同一 seed 下結果穩定，且不需要排序全表
-        sample = f"AND hash(user_idx * 2654435761 + {seed}) % 1000000 < {max_users}"
+    if min_history < 1:
+        raise ValueError("min_history 必須至少為 1")
+    if max_users is not None and max_users < 1:
+        raise ValueError("max_users 必須至少為 1")
+    # 先篩出合格使用者，再以 hash top-N 抽樣；LIMIT 是人數上限。
+    sample = (
+        f"ORDER BY hash(user_idx, {int(seed)}), user_idx LIMIT {int(max_users)}"
+        if max_users is not None else ""
+    )
 
     rows = con.execute(f"""
-        WITH eligible AS (
-            -- 該段有互動、且抽樣命中的使用者
-            SELECT DISTINCT user_idx FROM {src}
-            WHERE ts >= {lo} AND ts < {hi} {sample}
+        WITH future_users AS (
+            SELECT DISTINCT user_idx FROM {src} WHERE ts >= {lo} AND ts < {hi}
+        ), history_counts AS (
+            SELECT user_idx FROM {src}
+            WHERE ts < {cutoff} AND user_idx IN (SELECT user_idx FROM future_users)
+            GROUP BY user_idx HAVING count(*) >= {min_history}
+        ), qualified AS (
+            SELECT DISTINCT f.user_idx FROM {src} f
+            JOIN history_counts h USING (user_idx)
+            WHERE f.ts >= {lo} AND f.ts < {hi}
+              AND NOT EXISTS (
+                  SELECT 1 FROM {src} past
+                  WHERE past.user_idx = f.user_idx AND past.item_idx = f.item_idx
+                    AND past.ts < {cutoff}
+              )
+        ), eligible AS (
+            SELECT user_idx FROM qualified {sample}
         ),
         hist AS (
-            SELECT user_idx, list(item_idx ORDER BY ts) AS history
+            SELECT user_idx, list(item_idx ORDER BY ts, item_idx) AS history
             FROM {src} WHERE ts < {cutoff}
               AND user_idx IN (SELECT user_idx FROM eligible)
             GROUP BY user_idx
@@ -163,6 +175,7 @@ def build_eval_set(
                list_filter(f.future, x -> NOT list_contains(h.history, x)) AS truth
         FROM hist h JOIN fut f USING (user_idx)
         WHERE length(h.history) >= {min_history}
+        ORDER BY h.user_idx
     """).fetchall()
 
     users, histories, truths = [], [], []

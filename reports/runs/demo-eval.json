@@ -1,0 +1,489 @@
+{
+  "created_utc": "2026-09-12T01:51:20.533404+00:00",
+  "argv": [
+    "scripts/06_recall_eval.py",
+    "--src",
+    "<path>/interactions",
+    "--k",
+    "10",
+    "--eval-ks",
+    "5",
+    "10",
+    "--channels",
+    "popularity",
+    "covisitation",
+    "als",
+    "--weights",
+    "1",
+    "1",
+    "1",
+    "--bootstrap-samples",
+    "200",
+    "--temp-dir",
+    "<path>/tmp",
+    "--output",
+    "<path>/demo-eval.json",
+    "--examples",
+    "3"
+  ],
+  "git_commit": "c5e2cae9e56128b1d8b9a5c1a7886df5505e7613",
+  "git_status": "M README.md\n M docs/specs/2026-09-11-amazon-recsys-design.md\n M pyproject.toml\n M reports/web_report.html\n M scripts/06_recall_eval.py\n M src/amazon_recsys/evaluation/metrics.py\n M src/amazon_recsys/evaluation/splits.py\n M src/amazon_recsys/recall/als.py\n M src/amazon_recsys/recall/base.py\n M src/amazon_recsys/recall/covisitation.py\n M src/amazon_recsys/recall/popularity.py\n M tests/test_als.py\n M tests/test_metrics.py\n M tests/test_recall.py\n M tests/test_splits.py\n?? docs/evaluation_protocol.md\n?? reports/demo/\n?? reports/legacy_results.json\n?? reports/verification.md\n?? scripts/07_demo.py\n?? src/amazon_recsys/evaluation/experiment.py\n?? tests/test_eval_cli.py\n?? tests/test_experiment.py\n?? tests/test_ingest_synthetic.py",
+  "code_sha256": "275861b0b78e606c541d85c174ef2152556bf386d869284b2b67deea7c97688d",
+  "versions": {
+    "duckdb": "1.5.5",
+    "numpy": "2.5.3",
+    "scipy": "1.18.1",
+    "implicit": "0.7.3",
+    "pyarrow": "25.0.1",
+    "threadpoolctl": "3.6.0"
+  },
+  "python": "3.12.14",
+  "platform": "Windows-11-10.0.26200-SP0",
+  "source_directory": "reports/demo/interactions",
+  "source_files": [
+    {
+      "path": "demo.parquet",
+      "bytes": 1696,
+      "mtime_ns": 1789177560978715600
+    }
+  ],
+  "source_inventory_sha256": "8bae4676806bb4623ee755a46241144bb0f00f9ba6a6380926774378254978a5",
+  "source_fingerprint_note": "檔案清單、大小與修改時間指紋；不是資料內容 SHA256。",
+  "status": "completed",
+  "parameters": {
+    "src": "reports/demo/interactions",
+    "segment": "valid",
+    "k": 10,
+    "eval_ks": [
+      5,
+      10
+    ],
+    "max_users": null,
+    "seed": 42,
+    "examples": 3,
+    "channels": [
+      "popularity",
+      "covisitation",
+      "als"
+    ],
+    "weights": [
+      1.0,
+      1.0,
+      1.0
+    ],
+    "rrf_constant": 60.0,
+    "bootstrap_samples": 200,
+    "memory_limit": "32GB",
+    "temp_dir": "reports/demo/tmp",
+    "output": "reports/runs/demo-eval.json"
+  },
+  "results": {
+    "popularity": {
+      "recall@5": 0.3333333333333333,
+      "ndcg@5": 0.3333333333333333,
+      "recall@10": 0.3333333333333333,
+      "ndcg@10": 0.3333333333333333,
+      "coverage": 0.3170731707317073
+    },
+    "covisitation": {
+      "recall@5": 0.6666666666666666,
+      "ndcg@5": 0.6399069297160626,
+      "recall@10": 0.6666666666666666,
+      "ndcg@10": 0.6399069297160626,
+      "coverage": 0.4878048780487805
+    },
+    "als": {
+      "recall@5": 0.6666666666666666,
+      "ndcg@5": 0.5168835142398817,
+      "recall@10": 0.6666666666666666,
+      "ndcg@10": 0.5168835142398817,
+      "coverage": 0.4878048780487805
+    },
+    "round_robin": {
+      "recall@5": 0.6666666666666666,
+      "ndcg@5": 0.5436432511904858,
+      "recall@10": 0.6666666666666666,
+      "ndcg@10": 0.5436432511904858,
+      "coverage": 0.4634146341463415
+    },
+    "weighted_rrf": {
+      "recall@5": 0.6666666666666666,
+      "ndcg@5": 0.6666666666666666,
+      "recall@10": 0.6666666666666666,
+      "ndcg@10": 0.6666666666666666,
+      "coverage": 0.5121951219512195
+    }
+  },
+  "timings_seconds": {
+    "eval_set": 0.04332590000012715,
+    "popularity_fit": 0.006874400000015157,
+    "popularity_recommend": 0.00012770000012096716,
+    "covisitation_fit": 0.027762300000176765,
+    "covisitation_recommend": 0.1591513000003033,
+    "als_fit": 0.6260257999992973,
+    "als_recommend": 0.012179999999716529,
+    "round_robin": 0.00012849999984609894,
+    "weighted_rrf": 0.00019530000008671777
+  },
+  "channel_parameters": {
+    "popularity": {
+      "window_days": 90,
+      "pool_size": 2000,
+      "name": "popularity"
+    },
+    "covisitation": {
+      "window_days": 365,
+      "max_items_per_user": 20,
+      "top_n_neighbours": 50,
+      "min_cooccurrence": 3,
+      "name": "covisitation"
+    },
+    "als": {
+      "factors": 32,
+      "iterations": 10,
+      "regularization": 0.05,
+      "alpha": 40.0,
+      "min_user_interactions": 10,
+      "min_item_interactions": 5,
+      "window_days": null,
+      "random_state": 42,
+      "user_batch_size": 64,
+      "item_block_size": 65536,
+      "max_score_mb": 128.0,
+      "name": "als"
+    }
+  },
+  "protocol": "future-window unseen review interactions; macro user average",
+  "weights_note": "user-supplied",
+  "split": {
+    "train_end": "2023-03-01",
+    "valid_end": "2023-06-01",
+    "test_end_exclusive": "2023-09-10",
+    "feature_cutoff_exclusive": "2023-03-01"
+  },
+  "sample": {
+    "method": "all qualified",
+    "n_users": 3,
+    "seed": 42,
+    "user_ids_sha256": "5427af8fbcd1293544a867c496450e54fe79012f51217c3bc7c90fcf42c9f781",
+    "mean_history": 2.3333333333333335,
+    "mean_truth": 1.3333333333333333
+  },
+  "catalogue": {
+    "n_items_before_cutoff": 41,
+    "n_items_all_dates": 42,
+    "truth_interactions": 4,
+    "cold_truth_interactions": 1,
+    "cold_truth_fraction_micro": 0.25,
+    "train_catalogue_recall_ceiling_macro": 0.6666666666666666,
+    "coverage_denominator": "distinct items with ts < feature_cutoff"
+  },
+  "channel_stats": {
+    "covisitation": {
+      "edges": 760,
+      "items_with_neighbours": 40
+    },
+    "als": {
+      "users_trained": 60,
+      "items_trained": 40,
+      "factors": 32
+    }
+  },
+  "union_recall_ceiling": 0.6666666666666666,
+  "paired_bootstrap_vs_popularity": {
+    "round_robin": {
+      "5": {
+        "delta": 0.3333333333333333,
+        "ci95_low": 0.0,
+        "ci95_high": 0.6666666666666666,
+        "n_users": 3,
+        "samples": 200,
+        "seed": 42
+      },
+      "10": {
+        "delta": 0.3333333333333333,
+        "ci95_low": 0.0,
+        "ci95_high": 0.6666666666666666,
+        "n_users": 3,
+        "samples": 200,
+        "seed": 42
+      }
+    },
+    "weighted_rrf": {
+      "5": {
+        "delta": 0.3333333333333333,
+        "ci95_low": 0.0,
+        "ci95_high": 0.6666666666666666,
+        "n_users": 3,
+        "samples": 200,
+        "seed": 42
+      },
+      "10": {
+        "delta": 0.3333333333333333,
+        "ci95_low": 0.0,
+        "ci95_high": 0.6666666666666666,
+        "n_users": 3,
+        "samples": 200,
+        "seed": 42
+      }
+    }
+  },
+  "history_segments": {
+    "1-4": {
+      "n_users": 3,
+      "results": {
+        "popularity": {
+          "recall@5": 0.3333333333333333,
+          "ndcg@5": 0.3333333333333333,
+          "recall@10": 0.3333333333333333,
+          "ndcg@10": 0.3333333333333333
+        },
+        "covisitation": {
+          "recall@5": 0.6666666666666666,
+          "ndcg@5": 0.6399069297160626,
+          "recall@10": 0.6666666666666666,
+          "ndcg@10": 0.6399069297160626
+        },
+        "als": {
+          "recall@5": 0.6666666666666666,
+          "ndcg@5": 0.5168835142398817,
+          "recall@10": 0.6666666666666666,
+          "ndcg@10": 0.5168835142398817
+        },
+        "round_robin": {
+          "recall@5": 0.6666666666666666,
+          "ndcg@5": 0.5436432511904858,
+          "recall@10": 0.6666666666666666,
+          "ndcg@10": 0.5436432511904858
+        },
+        "weighted_rrf": {
+          "recall@5": 0.6666666666666666,
+          "ndcg@5": 0.6666666666666666,
+          "recall@10": 0.6666666666666666,
+          "ndcg@10": 0.6666666666666666
+        }
+      }
+    }
+  },
+  "examples": [
+    {
+      "user_idx": 1000,
+      "history_item_idx": [
+        1,
+        2,
+        3
+      ],
+      "truth_item_idx": [
+        4,
+        5
+      ],
+      "recommendations": {
+        "popularity": [
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12,
+          13
+        ],
+        "covisitation": [
+          4,
+          20,
+          5,
+          19,
+          6,
+          18,
+          7,
+          17,
+          8,
+          16
+        ],
+        "als": [
+          4,
+          20,
+          5,
+          12,
+          19,
+          6,
+          18,
+          13,
+          11,
+          108
+        ],
+        "round_robin": [
+          4,
+          5,
+          20,
+          6,
+          7,
+          19,
+          12,
+          8,
+          9,
+          18
+        ],
+        "weighted_rrf": [
+          4,
+          5,
+          6,
+          20,
+          19,
+          7,
+          12,
+          18,
+          8,
+          11
+        ]
+      }
+    },
+    {
+      "user_idx": 1001,
+      "history_item_idx": [
+        101,
+        102,
+        103
+      ],
+      "truth_item_idx": [
+        104
+      ],
+      "recommendations": {
+        "popularity": [
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10
+        ],
+        "covisitation": [
+          104,
+          120,
+          105,
+          119,
+          106,
+          118,
+          107,
+          117,
+          116,
+          108
+        ],
+        "als": [
+          120,
+          104,
+          112,
+          105,
+          119,
+          106,
+          118,
+          111,
+          7,
+          113
+        ],
+        "round_robin": [
+          1,
+          104,
+          120,
+          2,
+          3,
+          105,
+          112,
+          4,
+          119,
+          5
+        ],
+        "weighted_rrf": [
+          104,
+          120,
+          105,
+          119,
+          106,
+          118,
+          7,
+          1,
+          2,
+          3
+        ]
+      }
+    },
+    {
+      "user_idx": 1002,
+      "history_item_idx": [
+        9999
+      ],
+      "truth_item_idx": [
+        205
+      ],
+      "recommendations": {
+        "popularity": [
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10
+        ],
+        "covisitation": [
+          -1,
+          -1,
+          -1,
+          -1,
+          -1,
+          -1,
+          -1,
+          -1,
+          -1,
+          -1
+        ],
+        "als": [
+          -1,
+          -1,
+          -1,
+          -1,
+          -1,
+          -1,
+          -1,
+          -1,
+          -1,
+          -1
+        ],
+        "round_robin": [
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10
+        ],
+        "weighted_rrf": [
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10
+        ]
+      }
+    }
+  ],
+  "examples_note": "Deterministic first N sampled users, not cherry-picked successes. Integer IDs require the matching source maps; do not infer product names."
+}
