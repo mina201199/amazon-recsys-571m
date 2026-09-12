@@ -106,3 +106,14 @@ def test_invalid_input_is_rejected(recs, truths, err):
     ks = (5,) if "超過" in err else (2,)
     with pytest.raises(ValueError, match=err):
         M.evaluate(recs, truths, ks=ks)
+
+
+def test_paired_bootstrap_known_delta_and_reproducibility():
+    baseline = np.array([[0], [0]])
+    candidate = np.array([[1], [2]])
+    truth = [{1}, {2}]
+    result = M.paired_recall_bootstrap(baseline, candidate, truth, 1, samples=30)
+    assert result["delta"] == result["ci95_low"] == result["ci95_high"] == 1.0
+    assert result == M.paired_recall_bootstrap(baseline, candidate, truth, 1, samples=30)
+    zero = M.paired_recall_bootstrap(baseline, baseline, truth, 1, samples=30)
+    assert zero["ci95_low"] == zero["ci95_high"] == 0

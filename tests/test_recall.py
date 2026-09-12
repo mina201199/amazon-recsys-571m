@@ -126,3 +126,22 @@ def test_recommendations_exclude_history(con):
     r.fit(con, "inter", cutoff=S.ts("2023-06-01"))
     out = r.recommend([[1]], k=1)
     assert out.tolist() == [[2]], "商品 1 已在歷史中，應推第二熱門的 2"
+
+
+def test_rrf_rewards_agreement_and_respects_zero_weight():
+    a = np.array([[1, 2, 3]])
+    b = np.array([[4, 2, 5]])
+    assert base.weighted_rrf([a, b], 3)[0, 0] == 2
+    assert base.weighted_rrf([a, b], 3, [1, 0]).tolist() == [[1, 2, 3]]
+
+
+def test_rrf_duplicate_padding_and_ties():
+    a = np.array([[1, 1, -1]])
+    b = np.array([[2, -1, -1]])
+    assert base.weighted_rrf([a, b], 4).tolist() == [[1, 2, -1, -1]]
+
+
+@pytest.mark.parametrize("weights", [[0, 0], [-1, 1], [1], [float("nan"), 1]])
+def test_rrf_rejects_invalid_weights(weights):
+    with pytest.raises(ValueError, match="weights"):
+        base.weighted_rrf([np.array([[1]]), np.array([[2]])], 2, weights)

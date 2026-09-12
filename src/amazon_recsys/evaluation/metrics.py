@@ -10,7 +10,7 @@
   只會推 100 種商品的系統，Recall 再高也是廢的；這個指標會抓出
   「全部推熱門商品」的退化行為，而前兩個指標抓不到。
 
-全部以 numpy 向量化實作，避免逐使用者的 Python 迴圈。
+命中查找以逐使用者集合運算，折扣與聚合使用 NumPy。
 """
 
 from __future__ import annotations
@@ -128,3 +128,29 @@ def evaluate(
     if n_items:
         result.metrics["coverage"] = catalogue_coverage(recs, n_items)
     return result
+
+
+def paired_recall_bootstrap(
+    baseline: np.ndarray, candidate: np.ndarray, truths: list[set[int]],
+    k: int, *, samples: int = 1000, seed: int = 42,
+) -> dict[str, float | int]:
+    """同一批使用者的 Recall 差值 percentile bootstrap，回傳 95% CI。
+
+    這只衡量抽樣不確定性；不校正調參／多重比較，也不代表線上提升。
+    """
+    if samples < 1 or k < 1:
+        raise ValueError("samples 與 k 必須為正")
+    evaluate(baseline, truths, ks=(k,))
+    evaluate(candidate, truths, ks=(k,))
+    sizes = np.array([len(t) for t in truths])
+    valid = sizes > 0
+    if not valid.any():
+        raise ValueError("需要有答案的使用者")
+    diff = ((_hit_matrix(candidate[:, :k], truths).sum(axis=1)
+             - _hit_matrix(baseline[:, :k], truths).sum(axis=1))[valid] / sizes[valid])
+    rng = np.random.default_rng(seed)
+    means = np.array([rng.choice(diff, size=len(diff), replace=True).mean()
+                      for _ in range(samples)])
+    low, high = np.quantile(means, [0.025, 0.975])
+    return {"delta": float(diff.mean()), "ci95_low": float(low), "ci95_high": float(high),
+            "n_users": len(diff), "samples": samples, "seed": seed}

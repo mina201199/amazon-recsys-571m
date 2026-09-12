@@ -120,3 +120,29 @@ def test_split_summary_counts_each_segment(con):
     assert rows["train"]["interactions"] == 2   # (0,10) 與 (1,20)
     assert rows["valid"]["interactions"] == 1   # (0,12)
     assert rows["test"]["interactions"] == 3    # (0,11) (0,10) (2,30)
+
+
+def test_max_users_is_a_count_after_eligibility_and_is_repeatable(con):
+    rows = []
+    for u in range(10, 40):
+        rows.extend([(u, u * 10, S.ts("2022-01-01")),
+                     (u, u * 10 + 1, S.ts("2023-07-01"))])
+    # 只有未來資料，以及未來全是已見商品，都不能占用抽樣名額。
+    rows.extend([(100, 1, S.ts("2023-07-01")),
+                 (101, 1, S.ts("2022-01-01")), (101, 1, S.ts("2023-07-01"))])
+    con.executemany("INSERT INTO inter VALUES (?, ?, ?)", rows)
+    a = S.build_eval_set(con, "inter", SPLIT, max_users=7, seed=3)
+    b = S.build_eval_set(con, "inter", SPLIT, max_users=7, seed=3)
+    assert len(a[0]) == 7
+    assert a == b
+    assert not {100, 101} & set(a[0])
+    assert all(truth for truth in a[2])
+    assert a[0] != S.build_eval_set(con, "inter", SPLIT, max_users=7, seed=4)[0]
+    assert len(S.build_eval_set(con, "inter", SPLIT, max_users=100)[0]) == 31
+
+
+def test_max_users_and_history_reject_invalid_values(con):
+    with pytest.raises(ValueError, match="max_users"):
+        S.build_eval_set(con, "inter", SPLIT, max_users=0)
+    with pytest.raises(ValueError, match="min_history"):
+        S.build_eval_set(con, "inter", SPLIT, min_history=0)

@@ -1,3 +1,5 @@
+> 歷史設計草案：不代表所有功能已實作。現行任務與評估協定以 [evaluation_protocol.md](../evaluation_protocol.md) 為準。
+
 # Amazon Reviews 2023 大規模推薦系統 — 設計文件
 
 - 日期：2026-09-11

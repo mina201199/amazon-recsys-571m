@@ -1,11 +1,6 @@
-<!DOCTYPE html>
-<html lang="zh-Hant">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>在一台桌機上處理 5.71 億筆評論</title>
-<meta name="description" content="對完整的 Amazon Reviews 2023 資料集建立兩階段推薦系統的過程紀錄：三個我原本猜錯、被量測糾正的地方。">
-<style>
+<!doctype html><html lang="zh-Hant"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>5.71 億筆評論：單機離線召回</title><style>
 :root {
   color-scheme: light;
   --surface:        #fcfcfb;
@@ -110,425 +105,65 @@ tbody tr:hover { background: var(--surface-raised); }
 footer { margin-top: 80px; padding-top: 28px; border-top: 1px solid var(--border);
          font-size: 0.87rem; color: var(--text-muted); }
 footer a { color: var(--series-1); }
-</style>
-</head>
-<body>
-<div class="wrap">
-
-<header>
-  <h1>在一台桌機上處理 5.71 億筆評論</h1>
-  <p class="sub">對完整的 Amazon Reviews 2023 建立兩階段推薦系統的過程紀錄——
-  以及三個我原本猜錯、被量測糾正的地方。</p>
-  <p class="meta">
-    資料來源：<a href="https://amazon-reviews-2023.github.io/">Amazon Reviews 2023</a>，McAuley Lab, UCSD ·
-    執行環境：Intel i5-14500、64 GB 記憶體、<strong>無 GPU</strong> ·
-    <a href="https://github.com/mina201199/amazon-recsys-571m">原始碼</a><br>
-    本頁所有數字皆由程式實測後寫入，非估計值。
-  </p>
-</header>
-
-<div class="plain">
-  <span class="k">先用白話說一次</span>
-  <p>你在 Amazon 買過東西之後，首頁會出現「為你推薦」。這份專案就是<strong>從零做出那個功能</strong>：
-  給我一個人過去買過什麼，我要猜出他接下來會買什麼。</p>
-  <p>難的地方是 Amazon 上有<strong>四千八百萬種商品</strong>。要從裡面挑 10 個推薦給你，
-  又不能真的一個一個去比對——那樣你打開網頁要等好幾分鐘。</p>
-  <p>這份報告記錄的是把這件事做出來的過程，特別是<strong>三個我原本想錯、後來被數據糾正的地方</strong>。</p>
-</div>
-
-<h2>要解決什麼</h2>
-<p class="lead">給定一位使用者過去買過什麼，預測他接下來會買什麼——
-就是 Amazon 首頁「為你推薦」在做的事。</p>
-
-<p>難處不在演算法，在規模：</p>
-
-<div class="tiles">
-  <div class="tile"><div class="n">4819 萬</div><div class="l">個商品可選</div></div>
-  <div class="tile"><div class="n">5451 萬</div><div class="l">位使用者</div></div>
-  <div class="tile"><div class="n">5.71 億</div><div class="l">筆歷史互動</div></div>
-  <div class="tile"><div class="n">10 個</div><div class="l">最終要推薦的數量</div></div>
-</div>
-
-<p>對 4819 萬個商品逐一打分是不可能的。這份報告記錄的是：把這件事做出來的過程中，
-哪些直覺是對的、哪些被資料推翻。</p>
-
-<h2>意外一：這題目在單一類別裡做不成</h2>
-
-<p>資料集分成 33 個類別。合理的開發順序是先拿最小的類別（美妝，70 萬筆）試跑流程，
-確認沒問題再擴大。結果評估集只剩 <strong>37 位</strong>使用者。</p>
-
-<p>原因很直接：要驗證「猜下一個」準不準，這個人至少要買過<strong>兩次</strong>——
-拿前面那次當線索，後面那次當答案。只買過一次的人，沒有答案可以對。</p>
-
-<p>而在單一類別內，<strong>92.3% 的人只買過一次</strong>。</p>
-
-<figure>
-<svg viewBox="0 0 700 195" role="img" aria-label="單一類別與全量的使用者稀疏度對比">
-  <text x="0" y="14" class="bar-name" font-weight="650">只有 1 筆互動的使用者比例</text>
-  <g><title>單一類別：92.3%</title>
-    <text x="0" y="52" class="bar-name">單一類別</text>
-    <rect x="112" y="38" width="500" height="22" rx="4" fill="var(--grid)"/>
-    <rect x="112" y="38" width="461.5" height="22" rx="4" fill="var(--series-2)"/>
-    <text x="584" y="54" class="bar-label" font-weight="680" fill="var(--series-2)">92.3%</text>
-  </g>
-  <g><title>全量 33 類：19.2%</title>
-    <text x="0" y="94" class="bar-name">全量 33 類</text>
-    <rect x="112" y="80" width="500" height="22" rx="4" fill="var(--grid)"/>
-    <rect x="112" y="80" width="96" height="22" rx="4" fill="var(--series-1)"/>
-    <text x="220" y="96" class="bar-label" font-weight="680" fill="var(--series-1)">19.2%</text>
-  </g>
-  <line x1="0" y1="126" x2="700" y2="126" stroke="var(--border)"/>
-  <text x="0" y="152" class="bar-name" font-weight="650">可用於評估的使用者數</text>
-  <text x="0" y="180" class="bar-label" fill="var(--series-2)">單一類別
-    <tspan font-size="16" font-weight="680">37 位</tspan></text>
-  <text x="290" y="180" class="bar-label" fill="var(--series-1)">全量
-    <tspan font-size="16" font-weight="680">1,110,743 位</tspan></text>
-</svg>
-<figcaption>差距來自使用者的購買散落在不同類別。合併全部 33 類後，
-平均每人互動數從 1.15 筆升到 10.36 筆。</figcaption>
-</figure>
-
-<div class="callout">
-  <span class="k">這改變了什麼</span>
-  <p>「做全量」原本只是規模上的偏好，現在變成<strong>方法上的必要條件</strong>——
-  不合併全部類別，這個題目根本無法評估。這也讓後面所有為了跑全量而付出的工程成本
-  有了正當理由，而不只是為了讓數字好看。</p>
-</div>
-
-<h2>意外二：慢的不是演算法，是記憶體</h2>
-
-<div class="analogy">
-  <p><strong>先建立一個畫面：</strong>電腦的「記憶體」像一張書桌，「硬碟」像地下室的倉庫。
-  東西攤在桌上處理很快；桌子不夠大就得一趟趟跑倉庫，速度差上百倍。</p>
-  <p>這台電腦的桌子是 64 GB。接下來的故事就是：<strong>我以為自己的方法笨，
-  結果是桌子被一疊沒必要的東西佔滿了。</strong></p>
-</div>
-
-<p>把 5.71 億筆原始資料整理成可用格式時，程式跑了 <strong>75 分鐘還沒完成</strong>，
-而且不斷把東西搬去「倉庫」暫放，累積了 73 GB。</p>
-
-<p>中間有一步是「去掉重複」——同一個人對同一件商品重複評論過，只留最早那一筆。
-我判斷是這一步用的計算方式太笨（它需要把 5.71 億筆資料<strong>全部排序</strong>一次，
-而排序的依據是一串 28 個字的英數編號，比對很慢），打算換成另一種做法。</p>
-
-<p>改之前先做了測試，同一份資料、三種寫法各跑一次。結果推翻了我的判斷：</p>
-
-<figure>
-<svg viewBox="0 0 700 200" role="img" aria-label="三種去重做法的耗時比較">
-  <text x="0" y="12" class="axis-label">2950 萬列的去重耗時（秒），越短越好</text>
-  <!-- 刻度：x=100 為 0 秒，x=692 為 25 秒（23.68 px/秒），涵蓋最長的 22.2 秒 -->
-  <line x1="218" y1="24" x2="218" y2="162" class="gridline"/>
-  <line x1="337" y1="24" x2="337" y2="162" class="gridline"/>
-  <line x1="455" y1="24" x2="455" y2="162" class="gridline"/>
-  <line x1="574" y1="24" x2="574" y2="162" class="gridline"/>
-  <line x1="692" y1="24" x2="692" y2="162" class="gridline"/>
-  <line x1="100" y1="162" x2="692" y2="162" stroke="var(--border)"/>
-  <text x="218" y="180" class="axis-label" text-anchor="middle">5</text>
-  <text x="337" y="180" class="axis-label" text-anchor="middle">10</text>
-  <text x="455" y="180" class="axis-label" text-anchor="middle">15</text>
-  <text x="574" y="180" class="axis-label" text-anchor="middle">20</text>
-  <text x="692" y="180" class="axis-label" text-anchor="middle">25</text>
-
-  <g><title>視窗函數（原做法）：3.6 秒</title>
-    <text x="0" y="48" class="bar-name">做法 A（原本的）</text>
-    <rect x="100" y="34" width="85" height="20" rx="4" fill="var(--series-1)"/>
-    <text x="195" y="49" class="bar-label" font-weight="680">3.6 s</text>
-    <text x="240" y="49" class="bar-label">← 原做法，最快</text>
-  </g>
-  <g><title>GROUP BY 雜湊聚合：9.3 秒</title>
-    <text x="0" y="90" class="bar-name">做法 B</text>
-    <rect x="100" y="76" width="220" height="20" rx="4" fill="var(--series-2)"/>
-    <text x="330" y="91" class="bar-label" font-weight="680">9.3 s</text>
-    <text x="375" y="91" class="bar-label">慢 2.6 倍</text>
-  </g>
-  <g><title>先整數編碼再 GROUP BY：22.2 秒</title>
-    <text x="0" y="132" class="bar-name">做法 C</text>
-    <rect x="100" y="118" width="526" height="20" rx="4" fill="var(--series-2)" opacity="0.6"/>
-    <text x="636" y="133" class="bar-label" font-weight="680">22.2 s</text>
-  </g>
-</svg>
-<figcaption>三種做法算出來的結果<strong>完全一樣</strong>（都是 29,139,329 筆），
-所以比的是純粹的速度差異。<br>
-我原本要換掉的做法 A 其實最快，我提議的「修正」反而慢 2.6 到 6 倍——
-<strong>去重根本不是問題所在</strong>。</figcaption>
-</figure>
-
-<p>真正的原因要去量「桌子上到底放了什麼」才看得出來。程式為了方便，
-把整理到一半的 5.71 億筆資料<strong>全部攤在桌上</strong>。算一下每一筆佔多少空間，
-再乘以 5.71 億：</p>
-
-<figure>
-<svg viewBox="0 0 700 120" role="img" aria-label="暫存表記憶體用量與上限的對比">
-  <text x="0" y="12" class="axis-label">暫存表記憶體用量　vs　48 GB 上限</text>
-  <rect x="0" y="26" width="696" height="34" rx="5" fill="var(--grid)"/>
-  <rect x="0" y="26" width="660" height="34" rx="5" fill="var(--series-2)"/>
-  <text x="648" y="48" class="bar-label" text-anchor="end" fill="#ffffff" font-weight="680">45.5 GB</text>
-  <line x1="696" y1="18" x2="696" y2="68" stroke="var(--text-primary)" stroke-width="2"/>
-  <text x="696" y="84" class="axis-label" text-anchor="end">記憶體上限 48 GB</text>
-  <text x="0" y="108" class="bar-label">這一疊資料就佔掉
-    <tspan font-weight="680" fill="var(--series-2)">95%</tspan>
-    的桌面，後面每個步驟只剩一個角落可用，只好一直跑倉庫。</text>
-</svg>
-<figcaption>問題不在計算方式笨，而在於<strong>那疊資料根本不該攤在桌上</strong>。</figcaption>
-</figure>
-
-<p>改法是：整理好的資料<strong>邊算邊寫進檔案</strong>，不要堆在桌上；
-需要用的時候再只讀需要的那幾欄。同樣的工作，全量在 <strong>30.8 分鐘</strong>內完成，
-跑倉庫的次數也從 73 GB 降到 37 GB。</p>
-
-<div class="callout">
-  <span class="k">最後的取捨</span>
-  <p>最後我<em>仍然</em>換成了做法 B，但理由和一開始的猜測完全不同：
-  不是因為它比較快（測試顯示它較慢），而是因為兩者<strong>佔桌面的方式不一樣</strong>——
-  做法 A 需要的桌面大小取決於<strong>輸入</strong>有多少筆，做法 B 取決於<strong>輸出</strong>有多少筆。
-  去重後資料少了很多，所以當輸入遠大於桌子時，只有做法 B 放得下。</p>
-</div>
-
-<h2>資料長什麼樣</h2>
-
-<figure>
-<svg viewBox="0 0 700 250" role="img" aria-label="使用者互動筆數分布">
-  <text x="0" y="14" class="axis-label">使用者互動筆數分布（共 5451 萬位）</text>
-  <line x1="60" y1="212" x2="692" y2="212" stroke="var(--border)"/>
-  <!-- 最高的長條（32.7%）為 186px，其餘等比例；基線 y=212，標籤置於長條上方 9px -->
-  <g><title>1 筆：10,481,284 位（19.2%）</title>
-    <rect x="96" y="103" width="76" height="109" rx="4" fill="var(--series-2)"/>
-    <text x="134" y="94" class="bar-label" text-anchor="middle" font-weight="680">19.2%</text>
-    <text x="134" y="232" class="bar-name" text-anchor="middle">1 筆</text></g>
-  <g><title>2-4 筆：17,823,489 位（32.7%）</title>
-    <rect x="216" y="26" width="76" height="186" rx="4" fill="var(--series-1)"/>
-    <text x="254" y="17" class="bar-label" text-anchor="middle" font-weight="680">32.7%</text>
-    <text x="254" y="232" class="bar-name" text-anchor="middle">2–4</text></g>
-  <g><title>5-9 筆：11,841,175 位（21.7%）</title>
-    <rect x="336" y="89" width="76" height="123" rx="4" fill="var(--series-1)"/>
-    <text x="374" y="80" class="bar-label" text-anchor="middle" font-weight="680">21.7%</text>
-    <text x="374" y="232" class="bar-name" text-anchor="middle">5–9</text></g>
-  <g><title>10-49 筆：12,583,905 位（23.1%）</title>
-    <rect x="456" y="81" width="76" height="131" rx="4" fill="var(--series-1)"/>
-    <text x="494" y="72" class="bar-label" text-anchor="middle" font-weight="680">23.1%</text>
-    <text x="494" y="232" class="bar-name" text-anchor="middle">10–49</text></g>
-  <g><title>50 筆以上：1,784,411 位（3.3%）</title>
-    <rect x="576" y="193" width="76" height="19" rx="4" fill="var(--series-1)"/>
-    <text x="614" y="184" class="bar-label" text-anchor="middle" font-weight="680">3.3%</text>
-    <text x="614" y="232" class="bar-name" text-anchor="middle">50+</text></g>
-</svg>
-<figcaption>中位數 4 筆、P90 為 23 筆、最活躍的一位有 18,397 筆。
-橘色是無法用於 next-item 評估的族群。</figcaption>
-</figure>
-
-<p>商品端則是典型的長尾：<strong>最熱門 1% 的商品（48 萬個）佔了 47.8% 的互動</strong>，
-而 48.6% 的商品一輩子只被買過一次。這是為什麼「覆蓋率」必須和 Recall 一起看——
-一個只推熱門商品的模型，Recall 可以不難看，商業上卻毫無價值。</p>
-
-<h2>系統怎麼組成</h2>
-
-<div class="analogy">
-  <p><strong>用徵才來比喻：</strong>一個職缺收到四千八百萬封履歷，你不可能每個人都面談三小時。
-  實務上會先用幾個條件快速篩掉絕大多數，留下幾百份，再對這幾百份仔細看。</p>
-  <p>推薦系統一模一樣：<strong>先用便宜的方法把四千八百萬縮到幾百個，再用貴的方法從這幾百個裡挑出最好的十個。</strong>
-  差別只在於「便宜」和「貴」指的是電腦的計算時間。</p>
-</div>
-
-<p>這就是兩階段架構，YouTube、Pinterest 等公司實際採用的也是同一套：</p>
-
-<div class="tw">
-<table>
-  <thead><tr><th>階段</th><th>做什麼</th><th>為什麼</th></tr></thead>
-  <tbody>
-    <tr><td><strong>① 召回</strong></td><td>4819 萬 → 約 500 個候選</td>
-        <td>用便宜的統計方法（共現、矩陣分解、熱度）大幅縮小範圍</td></tr>
-    <tr><td><strong>② 排序</strong></td><td>500 個 → 10 個</td>
-        <td>用昂貴的模型精排，只在已縮小的候選上付出這個成本</td></tr>
-  </tbody>
-</table>
-</div>
-
-<p><strong>召回層的 Recall@500 是整個系統的天花板</strong>：召回沒撈到的商品，
-排序層再強也救不回來。所以這個數字要先量、先做高，再去碰排序層。</p>
-
-<h2 id="results">目前的結果</h2>
-
-<div class="analogy">
-  <p><strong>先解釋表格裡的欄位：</strong></p>
-  <p><strong>Recall@10</strong>＝推薦 10 個商品，裡面命中的比例。
-  <strong>Recall@500</strong>＝放寬到 500 個候選時的命中比例，代表「第一關篩選」的上限。<br>
-  <strong>覆蓋率</strong>＝這個模型總共推薦過幾種不同的商品。只會推同樣一百種商品的系統，
-  就算命中率好看，商業上也沒有價值——所以這欄要跟命中率一起看。</p>
-</div>
-
-<p>以下是實測結果：資料取 2023 年 3 月到 6 月這段期間、21,317 位使用者。
-模型只能看 3 月 1 日<strong>之前</strong>的資料，不准偷看之後發生的事——
-這個限制寫在程式裡強制執行，不是靠自己記得遵守。</p>
-
-<div class="tw">
-<table>
-  <thead><tr><th>召回通道</th><th class="num">Recall@10</th><th class="num">Recall@500</th>
-             <th class="num">NDCG@10</th><th class="num">覆蓋率</th></tr></thead>
-  <tbody>
-    <tr><td>熱門商品（基線）</td><td class="num">0.0023</td><td class="num">0.0252</td>
-        <td class="num">0.0015</td><td class="num">0.0000</td></tr>
-    <tr><td>共現統計</td><td class="num">0.0027</td><td class="num">0.0062</td>
-        <td class="num">0.0020</td><td class="num">0.0012</td></tr>
-    <tr><td>ALS 矩陣分解</td><td class="num">0.0012</td><td class="num">0.0104</td>
-        <td class="num">0.0011</td><td class="num">0.0001</td></tr>
-    <tr><td><strong>合併兩路</strong>（熱門＋共現）</td><td class="num"><strong>0.0037</strong></td>
-        <td class="num"><strong>0.0292</strong></td><td class="num"><strong>0.0023</strong></td>
-        <td class="num">0.0012</td></tr>
-    <tr><td>合併三路（再加 ALS）</td><td class="num">0.0030 ↓</td>
-        <td class="num">0.0243 ↓</td><td class="num">0.0021</td>
-        <td class="num">0.0012</td></tr>
-  </tbody>
-</table>
-</div>
-
-<figure>
-<svg viewBox="0 0 700 210" role="img" aria-label="五種召回設定的 Recall@10 比較">
-  <text x="0" y="12" class="axis-label">Recall@10（越高越好）· 長度依 0.0037 為滿格等比例</text>
-  <line x1="170" y1="186" x2="692" y2="186" stroke="var(--border)"/>
-  <g><title>ALS 矩陣分解：0.0012</title>
-    <text x="0" y="40" class="bar-name">ALS 矩陣分解</text>
-    <rect x="170" y="26" width="169" height="20" rx="4" fill="var(--grid)"/>
-    <text x="349" y="41" class="bar-label">0.0012</text></g>
-  <g><title>熱門商品基線：0.0023</title>
-    <text x="0" y="76" class="bar-name">熱門商品</text>
-    <rect x="170" y="62" width="325" height="20" rx="4" fill="var(--grid)"/>
-    <text x="505" y="77" class="bar-label">0.0023</text></g>
-  <g><title>共現統計：0.0027</title>
-    <text x="0" y="112" class="bar-name">共現統計</text>
-    <rect x="170" y="98" width="381" height="20" rx="4" fill="var(--series-3)"/>
-    <text x="561" y="113" class="bar-label">0.0027</text></g>
-  <g><title>合併三路（含 ALS）：0.0030，比只合併兩路更差</title>
-    <text x="0" y="148" class="bar-name">合併三路</text>
-    <rect x="170" y="134" width="423" height="20" rx="4" fill="var(--series-2)"/>
-    <text x="603" y="149" class="bar-label">0.0030</text></g>
-  <g><title>合併兩路（熱門＋共現）：0.0037，最佳</title>
-    <text x="0" y="184" class="bar-name" font-weight="650">合併兩路</text>
-    <rect x="170" y="170" width="522" height="20" rx="4" fill="var(--series-1)"/>
-    <text x="596" y="185" class="bar-label" fill="#ffffff" font-weight="680">0.0037</text></g>
-</svg>
-<figcaption>合併兩路勝過任何單一通道——多路召回的價值在這裡成立。
-但<strong>再加入第三路（ALS）反而變差</strong>，原因見下。</figcaption>
-</figure>
-
-<h3>怎麼讀這些數字</h3>
-
-<p>0.0037 看起來很小，但要跟合理的參照點比。這個任務是
-<strong>從 4819 萬個商品中，猜中這個人接下來會買的那 2.26 個</strong>。</p>
-
-<p>如果完全用猜的，命中率大約是 0.00000005——小數點後七個零。
-最簡單的「推薦全站最熱門商品」做法能到 0.0023，<strong>已經是亂猜的四萬倍</strong>；
-合併兩路後是 0.0037。</p>
-
-<p>所以報告一定要有「最笨的做法能到多少」當對照。
-<strong>脫離對照組談絕對數字沒有意義</strong>——這也是為什麼我把熱門商品那一列留在表格最上面，
-即使它讓我的模型看起來沒那麼厲害。</p>
-
-<h3>意外三：加得越多，反而越差</h3>
-
-<p>這一節有兩個各自獨立的實驗，最後指向同一個結論。</p>
-
-<h3>證據一：更大的候選圖</h3>
-
-<p>「共現」這一路的做法是統計<strong>「買了 A 的人也買了 B」</strong>。
-原本為了怕跑太久，我把統計範圍設得很窄（只看最近一年、每人只取最近 20 筆）。
-修掉一個效能問題後，這一步從十幾分鐘降到 16 秒，於是我把範圍放寬，
-預期能找到更多關聯、命中率提升。結果相反：</p>
-
-<div class="tw">
-<table>
-  <thead><tr><th></th><th class="num">收緊參數</th><th class="num">放寬參數</th></tr></thead>
-  <tbody>
-    <tr><td>鄰居圖邊數</td><td class="num">455,842</td><td class="num">18,538,480</td></tr>
-    <tr><td>有鄰居的商品</td><td class="num">116,485</td><td class="num">1,727,364</td></tr>
-    <tr><td>共現自己的 Recall@500</td><td class="num">0.0062</td><td class="num">0.0126 ↑</td></tr>
-    <tr><td><strong>合併後 Recall@10</strong></td><td class="num"><strong>0.0037</strong></td>
-        <td class="num"><strong>0.0028 ↓</strong></td></tr>
-    <tr><td>fit 耗時</td><td class="num">16.3 s</td><td class="num">239.7 s</td></tr>
-  </tbody>
-</table>
-</div>
-
-<div class="callout">
-  <span class="k">為什麼會這樣</span>
-  <p>兩路推薦是<strong>輪流出牌</strong>合併的：你一個、我一個，權重相等。
-  放寬範圍後，「共現」找到的關聯變多，但多出來的那些關聯比較薄弱——
-  而它們照樣輪流擠進名單前段，把原本更好的候選推掉了。</p>
-  <p><strong>問題不在找到的關聯不夠多，在合併的方式太天真。</strong>
-  算了 15 倍的時間、關聯多了 40 倍，結果反而更差。</p>
-</div>
-
-<h3>證據二：加入第三種推薦方法</h3>
-
-<p>我另外實作了第三路：<strong>ALS 矩陣分解</strong>。它的想法是把每個人和每件商品
-都用一組數字描述（像「這個人偏好 3C、價格敏感」），再找出數字相近的配對。
-它能找到「沒有人同時買過，但品味相近」的商品——理論上和前兩路互補。</p>
-
-<p>訓練用了 1250 萬位使用者、1152 萬件商品，花了 18.6 分鐘。結果：</p>
-
-<div class="tw">
-<table>
-  <thead><tr><th>設定</th><th class="num">Recall@10</th><th class="num">Recall@500</th></tr></thead>
-  <tbody>
-    <tr><td>ALS 單獨</td><td class="num">0.0012</td><td class="num">0.0104</td></tr>
-    <tr><td><strong>合併兩路</strong>（熱門＋共現）</td>
-        <td class="num"><strong>0.0037</strong></td><td class="num"><strong>0.0292</strong></td></tr>
-    <tr><td>合併三路（再加 ALS）</td><td class="num">0.0030 ↓</td><td class="num">0.0243 ↓</td></tr>
-  </tbody>
-</table>
-</div>
-
-<p>ALS 自己的命中率是三路中最低的（0.0012，比最簡單的熱門商品還差）。
-而在輪流出牌的合併下，它照樣分到三分之一的名額，把更好的候選擠掉了。</p>
-
-<div class="callout">
-  <span class="k">兩個實驗，同一個結論</span>
-  <p>一個是把既有通道放寬、一個是加入全新通道，兩次都讓結果變差。
-  病因完全相同：<strong>合併是輪流出牌、權重相等，所以任何一路變弱或變吵，
-  都會直接稀釋最終名單。</strong></p>
-  <p>這比單一次觀察有力得多——兩條獨立的路徑指向同一個瓶頸，
-  代表<strong>限制真的在合併層，不是在任何一路的參數</strong>。
-  下一步該做的是讓合併依通道品質加權，而不是繼續調參或加通道。</p>
-</div>
-
-<h3>順帶一提：一個 53 分鐘的實作錯誤</h3>
-
-<p>ALS 產生推薦花了 <strong>53 分鐘</strong>，比訓練還久，這很不合理。
-查下去發現是我逐一使用者去比對全部 1152 萬件商品——
-兩萬位使用者就是 <strong>7.8 兆次運算</strong>，而且每次都重新走訪一遍整份資料。</p>
-
-<p>改成把所有使用者疊成一個矩陣、一次算完後，交給底層的數學函式庫處理。
-<strong>這不是演算法問題，是我沒有善用工具。</strong>
-量測的價值就在這裡——如果沒有把各步驟的耗時分開記錄，
-我只會覺得「ALS 本來就慢」，而不會發現慢的是自己寫的那三行。</p>
-
-<h3>還沒完成的</h3>
-
-<p>ALS 矩陣分解通道已實作並通過測試，但尚未在全量資料上執行——
-5451 萬使用者的 Cholesky 求解成本需要另外規劃。排序層（LightGBM）
-同樣已有設計但尚未接上。這兩項是明確的下一步，不是被遺忘的部分。</p>
-
-<h2>這份分析的邊界</h2>
-
-<p>該講清楚的限制：</p>
-
-<ul>
-  <li><strong>資料裡只有「有寫評論」的購買。</strong>買了東西但沒留評論的，
-  這份資料看不到。所以習慣寫評論的人會被過度代表，安靜的買家被低估。</li>
-  <li><strong>只看買了什麼，沒看評論寫了什麼。</strong>評論文字（平均 173 個字）
-  完全沒有使用。這是刻意的取捨——先把「買了什麼」這個訊號做好，不是資料不存在。</li>
-  <li><strong>沒有真人驗證過。</strong>所有數字都是拿歷史資料回頭模擬出來的。
-  推薦系統實際上線後會不會真的讓人多買，要做 A/B 測試才知道。</li>
-  <li><strong>測試段較稀疏。</strong>2023-06 之後互動量明顯下降（驗證段 1106 萬筆
-  vs 測試段 304 萬筆），推測是資料集收集截止前的遞減尾巴。已確認測試段仍有
-  111 萬位合格使用者，統計上足夠。</li>
-</ul>
-
-<footer>
-  <p>所有數字由程式實測後寫入，報告中沒有任何手打的數值。
-  重跑 <code>scripts/</code> 下的管線即可重現。</p>
-  <p><a href="https://github.com/mina201199/amazon-recsys-571m">GitHub 原始碼與設計文件</a>　·　MIT 授權</p>
-</footer>
-
-</div>
-</body>
-</html>
+</style></head><body><main class="wrap">
+<header><p class="meta">AMAZON REVIEWS 2023 · 單機資料工程 / 離線推薦</p>
+<h1>5.71 億筆評論，<br>從資料處理到候選召回。</h1>
+<p class="sub">完成資料管線、三路召回與時間切分評估；精排與線上服務尚未完成。</p>
+<p class="meta"><a href="demo/demo.html">開啟三位使用者展示 →</a>　·　<a href="../README.md">README</a></p></header>
+<div class="callout"><span class="k">數據來源與狀態</span>
+<p>本頁全量數字沿用舊版紀錄，本次環境沒有原始 D 槽資料，未重跑全量。
+新版 ALS、抽樣與融合已有程式修正；新版本成績與加速幅度仍待量測。
+<a href="legacy_results.json">歷史數據紀錄</a>保留未知欄位，不推測補填。</p></div>
+<div class="tiles"><div class="tile"><div class="n">5.71 億</div><div class="l">歷史紀錄：原始評論列數</div></div>
+<div class="tile"><div class="n">30.8 分鐘</div><div class="l">歷史紀錄：全量轉檔</div></div>
+<div class="tile"><div class="n">64 GB</div><div class="l">原執行環境記憶體</div></div></div>
+<h2>預測的是什麼？</h2>
+<p>利用使用者在切分點之前的評論互動，推薦未來時間窗內可能新互動的商品。
+答案是一個商品集合，不是嚴格的「下一件購買」。評論時間不等於購買時間，
+未評論的行為也不在資料中；低評分目前同樣被視為互動訊號。</p>
+<h2>最值得保留的工程經驗</h2>
+<h3>先量測，再決定要改什麼</h3>
+<p>全量轉檔曾執行 75 分鐘仍未完成。原先猜測視窗函數去重太慢，
+但舊基準測試在約 2,950 萬列上得到：視窗函數 3.6 秒、GROUP BY 9.3 秒。
+替換語法並不等於改善效能。</p>
+<h3>中間資料的形狀，比最終檔案大小更重要</h3>
+<p>舊量測的記憶體暫存表約 45.5 GB，接近 48 GB 預算。改以 staging Parquet
+串接解析、映射及去重後，歷史紀錄的 spill 從 73 GB 降至 37 GB，轉檔約 30.8 分鐘。
+壓縮結果只有 6 GB，不代表 join、雜湊、排序與模型因子也只占 6 GB。</p>
+<h3>跨類別增加可觀測歷史</h3>
+<p>資料包含 33 個正式類別加 Unknown，共 34 個檔案。
+舊報告中單類別與全量的單次互動使用者比例分別為 92.3% 與 19.2%。
+跨類別有助增加可評估歷史；這不代表所有單類別推薦任務都不可行。</p>
+<h2>歷史召回結果</h2>
+<p>valid：[2023-03-01, 2023-06-01)，報告人數 21,317，候選 K=500。
+原始抽樣命令未保存，不能把此表直接當成新版實驗對照。</p>
+<div class="tw"><table><thead><tr><th>通道</th><th>Recall@10</th><th>Recall@500</th><th>NDCG@10</th></tr></thead><tbody>
+<tr><td>熱門</td><td>0.0023</td><td>0.0252</td><td>0.0015</td></tr>
+<tr><td>共現</td><td>0.0027</td><td>0.0062</td><td>0.0020</td></tr>
+<tr><td>舊 ALS：商品向量平均</td><td>0.0012</td><td>0.0104</td><td>0.0011</td></tr>
+<tr><td>熱門＋共現</td><td>0.0037</td><td>0.0292</td><td>0.0023</td></tr>
+<tr><td>三路合併</td><td>0.0030</td><td>0.0243</td><td>0.0021</td></tr>
+</tbody></table></div>
+<p>兩路 Recall@500 相對熱門約提升 <strong>15.9%</strong>，絕對增加 <strong>0.4 個百分點</strong>。
+這是由四捨五入數值計算的驗證集觀察，沒有舊逐使用者結果可計算信賴區間。
+候選只涵蓋約 2.92% 的答案，精排無法找回未召回的商品。</p>
+<h2>本次修正了哪些問題？</h2>
+<ul><li><strong>ALS 使用者向量：</strong>由商品向量平均改為標準 fold-in，沿用訓練時的信心權重與正規化。</li>
+<li><strong>雙向分塊：</strong>同時切使用者與商品；舊公式在 1,152 萬商品時仍是 batch=1，舊加速宣稱已撤回。新版仍是精確全模型搜尋。</li>
+<li><strong>嚴格抽樣上限：</strong>先篩合格使用者，再 hash top-N。舊版 max-users 實際是比例門檻。</li>
+<li><strong>融合比較：</strong>保留 round-robin 並加入加權 RRF；等權只是起點，尚未證實較佳。</li>
+<li><strong>實驗證據：</strong>JSON 保存版本、參數、樣本人數、來源指紋與結果，另報冷商品比例、候選聯集上限與 paired bootstrap。</li></ul>
+<h2>如何解讀失敗？</h2>
+<p>放寬共現或加入 ALS 後，合併成績下降，提示融合策略值得優先驗證。
+但向量估計、通道品質、過濾門檻與樣本差異仍可能影響結果；目前不能斷言原因只有合併層。</p>
+<h2>能展示什麼？</h2>
+<p><a href="demo/demo.html">三位使用者的互動展示</a>由實際程式產生：展示兩種興趣與一個冷啟動限制案例。
+商品與互動全為合成資料，頁面保留失敗推薦，不當作 Amazon 成績。</p>
+<h2>下一步與邊界</h2>
+<p>先在原機重跑新版 valid、比較融合設定與召回缺口，凍結設定後跑 test。
+再評估精排、模型持久化、ANN / 預計算與服務延遲。線上收益需 A/B 驗證。</p>
+<p>目前評估只涵蓋有歷史且未來有新互動的使用者；訓練後才出現的商品保留在答案內，
+另外揭露不可達比例。時間切分不能消除評論選樣偏差。</p>
+<footer><p><a href="verification.md">本次驗證紀錄</a> · <a href="../docs/evaluation_protocol.md">評估協定與重跑命令</a></p>
+<p>全量數字為舊版紀錄；展示與新測試另有輸出。未宣稱新版全量已驗證或已上線。</p></footer>
+</main></body></html>

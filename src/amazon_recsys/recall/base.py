@@ -90,3 +90,44 @@ def merge_channels(
                 break
         out[u, : len(picked)] = picked[:k]
     return out
+
+
+def weighted_rrf(
+    candidate_lists: list[np.ndarray], k: int,
+    weights: list[float] | None = None, rank_constant: float = 60.0,
+) -> np.ndarray:
+    """加權 reciprocal rank fusion；權重只可在驗證段選擇。
+
+    score(item) = sum(weight[channel] / (rank_constant + rank))。
+    不比較各模型不可比的原始分數；同一通道內重複商品只計第一次。
+    """
+    if not candidate_lists or k < 1:
+        raise ValueError("需要至少一路通道，且 k >= 1")
+    if any(c.ndim != 2 for c in candidate_lists):
+        raise ValueError("候選矩陣必須為二維")
+    n_users = len(candidate_lists[0])
+    if any(len(c) != n_users for c in candidate_lists):
+        raise ValueError("各通道的使用者數必須一致")
+    weights = [1.0] * len(candidate_lists) if weights is None else weights
+    if (len(weights) != len(candidate_lists)
+            or any(not np.isfinite(w) or w < 0 for w in weights)
+            or not any(w > 0 for w in weights)):
+        raise ValueError("weights 必須與通道數一致、非負有限，且至少一項為正")
+    if not np.isfinite(rank_constant) or rank_constant < 0:
+        raise ValueError("rank_constant 必須非負有限")
+    out = np.full((n_users, k), PAD, dtype=np.int64)
+    for u in range(n_users):
+        scores: dict[int, float] = {}
+        for candidates, weight in zip(candidate_lists, weights, strict=True):
+            if weight == 0:
+                continue
+            seen: set[int] = set()
+            for rank, raw in enumerate(candidates[u], start=1):
+                item = int(raw)
+                if item < 0 or item in seen:
+                    continue
+                seen.add(item)
+                scores[item] = scores.get(item, 0.0) + weight / (rank_constant + rank)
+        ranked = sorted(scores, key=lambda item: (-scores[item], item))[:k]
+        out[u, :len(ranked)] = ranked
+    return out

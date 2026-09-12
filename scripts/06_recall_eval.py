@@ -1,30 +1,32 @@
-"""量測召回層：各通道與合併後的 Recall@K，並記錄每個環節的耗時。
+"""召回評估：各通道、round-robin、加權 RRF，以及可追溯 JSON 紀錄。
 
-召回層的 Recall@K 是整個系統的天花板——召回沒撈到的商品，
-排序層再強也救不回來。所以這個數字要先做高，再去調排序。
-
-本腳本同時記錄各環節耗時，用來判斷全量迭代是否可行、
-是否需要改用抽樣資料開發。
-
-用法：
-    uv run python scripts/06_recall_eval.py
-    uv run python scripts/06_recall_eval.py --k 500 --max-users 50000
+使用 valid 決定參數／權重，固定設定後才執行 test。RRF 預設等權不是調參結果。
 """
-
 from __future__ import annotations
 
 import argparse
+import hashlib
+import json
 import sys
 import time
+from dataclasses import fields
+from datetime import UTC, datetime
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 import duckdb
+import numpy as np
 
 from amazon_recsys import config
 from amazon_recsys.evaluation import metrics as M
 from amazon_recsys.evaluation import splits as S
+from amazon_recsys.evaluation.experiment import (
+    catalogue_diagnostics,
+    provenance,
+    public_path,
+    save_record,
+)
 from amazon_recsys.recall import base
 from amazon_recsys.recall.als import ALSRecall
 from amazon_recsys.recall.covisitation import CoVisitationRecall
@@ -32,110 +34,161 @@ from amazon_recsys.recall.popularity import PopularityRecall
 
 CHANNELS = {
     "popularity": lambda k: PopularityRecall(window_days=90, pool_size=max(2000, k * 4)),
-    # 這組參數是量測選出來的，不是猜的。放寬版（1095 天 / 50 筆 / 門檻 2）
-    # 讓鄰居圖從 45.6 萬條邊長到 1854 萬條、fit 從 16 秒變成 240 秒，
-    # 但合併後的 Recall@10 反而從 0.0037 掉到 0.0028。
-    #
-    # 原因是合併採輪流交錯、兩路權重相等：共現放寬後產生大量較弱的候選，
-    # 在名單前段擠掉了熱門商品的候選。限制不在圖的大小，在合併策略——
-    # 要讓更大的圖發揮價值，得先讓合併能依通道品質加權。
     "covisitation": lambda k: CoVisitationRecall(
-        window_days=365, max_items_per_user=20, top_n_neighbours=50, min_cooccurrence=3
-    ),
-    # 全量規模下的成本控制：5451 萬使用者中，互動少於 10 筆的佔 51.9%，
-    # 他們的潛在向量本來就估不準。過濾掉同時改善成本與品質。
-    # 因子數從 64 降到 32：因子矩陣從 26 GB 降到 13 GB，且本專案的
-    # 評估指標對因子數不敏感（召回層只要候選涵蓋得到即可）。
+        window_days=365, max_items_per_user=20, top_n_neighbours=50, min_cooccurrence=3),
     "als": lambda k: ALSRecall(
-        factors=32, iterations=10, min_user_interactions=10, min_item_interactions=5
-    ),
+        factors=32, iterations=10, min_user_interactions=10, min_item_interactions=5),
 }
 
 
 def main() -> int:
-    # 重導向到檔案時 stdout 會緩衝，長時間執行就看不到進度
-    sys.stdout.reconfigure(line_buffering=True)
-
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(line_buffering=True)
     ap = argparse.ArgumentParser(description=__doc__)
-    ap.add_argument("--src", default=None)
-    ap.add_argument("--segment", choices=["valid", "test"], default="valid",
-                    help="預設用 valid；test 段保留到最後只評估一次")
-    ap.add_argument("--k", type=int, default=500, help="召回候選數")
+    ap.add_argument("--src", type=Path, default=config.INTERACTIONS_DIR)
+    ap.add_argument("--segment", choices=["valid", "test"], default="valid")
+    ap.add_argument("--k", type=int, default=500)
     ap.add_argument("--eval-ks", type=int, nargs="+", default=[10, 100, 500])
-    ap.add_argument("--max-users", type=int, default=None)
-    ap.add_argument("--channels", nargs="+", default=list(CHANNELS),
-                    choices=list(CHANNELS))
+    ap.add_argument("--max-users", type=int, default=None, help="合格使用者的嚴格人數上限")
+    ap.add_argument("--seed", type=int, default=42)
+    ap.add_argument("--examples", type=int, default=0, help="另存前 N 位的整數 ID 範例；預設不輸出")
+    ap.add_argument("--channels", nargs="+", default=list(CHANNELS), choices=list(CHANNELS))
+    ap.add_argument("--weights", type=float, nargs="+", help="依 --channels 順序；只在 valid 調整")
+    ap.add_argument("--rrf-constant", type=float, default=60.0)
+    ap.add_argument("--bootstrap-samples", type=int, default=1000)
     ap.add_argument("--memory-limit", default="32GB")
+    ap.add_argument("--temp-dir", type=Path, default=config.DATA_ROOT / "duckdb_tmp")
+    ap.add_argument("--output", type=Path, help="新 JSON 檔案；拒絕覆寫既有實驗")
     args = ap.parse_args()
-
-    src_dir = Path(args.src) if args.src else config.INTERACTIONS_DIR
-    src = f"read_parquet('{src_dir.as_posix()}/**/*.parquet', hive_partitioning=true)"
-
+    if args.k < 1 or any(k < 1 or k > args.k for k in args.eval_ks):
+        ap.error("eval-ks 必須介於 1 與 k 之間")
+    if args.max_users is not None and args.max_users < 1:
+        ap.error("max-users 必須至少為 1")
+    if args.examples < 0:
+        ap.error("examples 不可為負")
+    if args.bootstrap_samples < 0:
+        ap.error("bootstrap-samples 不可為負")
+    if len(set(args.channels)) != len(args.channels):
+        ap.error("channels 不可重複")
+    weights = args.weights or [1.0] * len(args.channels)
+    try:
+        base.weighted_rrf([np.empty((0, args.k), dtype=int) for _ in args.channels],
+                          args.k, weights, args.rrf_constant)
+    except ValueError as exc:
+        ap.error(str(exc))
+    if not args.src.is_dir() or not any(args.src.rglob("*.parquet")):
+        ap.error(f"找不到互動 Parquet：{args.src}；展示請先執行 scripts/07_demo.py")
+    stamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%S%fZ")
+    output = args.output or config.REPORTS_DIR / "runs" / f"{stamp}.json"
+    if output.exists():
+        ap.error(f"結果已存在，請選新路徑：{output}")
+    root = Path(__file__).resolve().parents[1]
+    record = provenance(root, args.src, sys.argv)
+    record.update({"status": "running", "parameters": {
+        k: public_path(v, root) if isinstance(v, Path) else v for k, v in vars(args).items()},
+        "results": {}, "timings_seconds": {}, "channel_parameters": {},
+        "protocol": "future-window unseen review interactions; macro user average",
+        "weights_note": "user-supplied" if args.weights else "equal weights; not tuned"})
+    save_record(output, record)
     con = duckdb.connect()
-    con.execute(f"SET threads={config.N_THREADS}")
-    con.execute(f"SET memory_limit='{args.memory_limit}'")
-    tmp = config.DATA_ROOT / "duckdb_tmp"
-    tmp.mkdir(parents=True, exist_ok=True)
-    con.execute(f"SET temp_directory='{tmp.as_posix()}'")
-
-    split = S.DEFAULT_SPLIT
-    cutoff = split.feature_cutoff(args.segment)
-    print(f"切分：{split.describe()}")
-    print(f"評估段：{args.segment}（特徵只能用到 {S.to_date(cutoff)} 之前）\n")
-
-    t = time.time()
-    users, hists, truths = S.build_eval_set(
-        con, src, split, segment=args.segment, max_users=args.max_users
-    )
-    t_eval_set = time.time() - t
-    if not users:
-        print("沒有合格的使用者。")
-        return 1
-
-    hl = sorted(len(h) for h in hists)
-    print(f"評估集：{len(users):,} 位使用者（建構耗時 {t_eval_set:.1f}s）")
-    print(f"  歷史長度 中位數 {hl[len(hl) // 2]}，平均 {sum(hl) / len(hl):.1f}，最長 {hl[-1]}")
-    print(f"  正確答案 平均 {sum(len(x) for x in truths) / len(truths):.2f}\n")
-
-    n_items = con.execute(f"SELECT count(DISTINCT item_idx) FROM {src}").fetchone()[0]
-
-    results, timings = {}, {"評估集建構": t_eval_set}
-    for name in args.channels:
-        ch = CHANNELS[name](args.k)
-        t = time.time()
-        ch.fit(con, src, cutoff=cutoff)
-        t_fit = time.time() - t
-
-        t = time.time()
-        recs = ch.recommend(hists, k=args.k)
-        t_rec = time.time() - t
-
-        res = M.evaluate(recs, truths, ks=tuple(args.eval_ks), n_items=n_items)
-        results[name] = (recs, res)
-        timings[f"{name} fit"] = t_fit
-        timings[f"{name} recommend"] = t_rec
-
-        extra = ""
-        if hasattr(ch, "stats"):
-            extra = "  " + "  ".join(f"{k}={v:,}" for k, v in ch.stats().items())
-        print(f"[{name}] fit {t_fit:6.1f}s  recommend {t_rec:6.1f}s{extra}")
-        print(f"         {res}")
-
-    if len(results) > 1:
-        t = time.time()
-        merged = base.merge_channels([r[0] for r in results.values()], k=args.k)
-        t_merge = time.time() - t
-        timings["合併"] = t_merge
-        res = M.evaluate(merged, truths, ks=tuple(args.eval_ks), n_items=n_items)
-        print(f"\n[合併 {len(results)} 路] {t_merge:.1f}s")
-        print(f"         {res}")
-
-    print("\n=== 耗時明細 ===")
-    total = sum(timings.values())
-    for k, v in sorted(timings.items(), key=lambda x: -x[1]):
-        print(f"  {k:<24} {v:8.1f}s  ({100 * v / total:4.1f}%)")
-    print(f"  {'合計':<24} {total:8.1f}s  ({total / 60:.1f} 分鐘)")
-    return 0
+    try:
+        con.execute(f"SET threads={config.N_THREADS}")
+        con.execute(f"SET memory_limit='{args.memory_limit}'")
+        args.temp_dir.mkdir(parents=True, exist_ok=True)
+        temp = args.temp_dir.as_posix().replace("'", "''")
+        con.execute(f"SET temp_directory='{temp}'")
+        path = args.src.as_posix().replace("'", "''")
+        src = f"read_parquet('{path}/**/*.parquet', hive_partitioning=true)"
+        split = S.DEFAULT_SPLIT
+        cutoff = split.feature_cutoff(args.segment)
+        record["split"] = {"train_end": S.to_date(split.train_end),
+                           "valid_end": S.to_date(split.valid_end),
+                           "test_end_exclusive": S.to_date(split.test_end),
+                           "feature_cutoff_exclusive": S.to_date(cutoff)}
+        t = time.perf_counter()
+        users, hists, truths = S.build_eval_set(
+            con, src, split, segment=args.segment, max_users=args.max_users, seed=args.seed)
+        record["timings_seconds"]["eval_set"] = time.perf_counter() - t
+        if not users:
+            raise ValueError("沒有合格的評估使用者")
+        record["sample"] = {
+            "method": "hash top-N among qualified users" if args.max_users else "all qualified",
+            "n_users": len(users), "seed": args.seed,
+            "user_ids_sha256": hashlib.sha256(json.dumps(users).encode()).hexdigest(),
+            "mean_history": sum(map(len, hists)) / len(hists),
+            "mean_truth": sum(map(len, truths)) / len(truths),
+        }
+        record["catalogue"] = catalogue_diagnostics(con, src, cutoff, truths)
+        n_items = record["catalogue"]["n_items_before_cutoff"]
+        results = {}
+        for name in args.channels:
+            channel = CHANNELS[name](args.k)
+            record["channel_parameters"][name] = {
+                f.name: getattr(channel, f.name) for f in fields(channel)
+                if not f.name.startswith("_")}
+            t = time.perf_counter()
+            channel.fit(con, src, cutoff=cutoff)
+            record["timings_seconds"][f"{name}_fit"] = time.perf_counter() - t
+            t = time.perf_counter()
+            results[name] = channel.recommend(hists, k=args.k)
+            record["timings_seconds"][f"{name}_recommend"] = time.perf_counter() - t
+            evaluated = M.evaluate(results[name], truths, ks=tuple(args.eval_ks), n_items=n_items)
+            record["results"][name] = evaluated.metrics
+            if hasattr(channel, "stats"):
+                record.setdefault("channel_stats", {})[name] = channel.stats()
+            print(f"[{name}] {evaluated}")
+            save_record(output, record)
+            del channel
+        if len(results) > 1:
+            candidates = list(results.values())
+            record["union_recall_ceiling"] = float(np.mean([
+                len(set().union(*(set(c[u][c[u] >= 0]) for c in candidates)) & truth)
+                / len(truth) for u, truth in enumerate(truths)]))
+            for name, merge in (
+                ("round_robin", lambda: base.merge_channels(candidates, args.k)),
+                ("weighted_rrf", lambda: base.weighted_rrf(
+                    candidates, args.k, weights, args.rrf_constant)),
+            ):
+                t = time.perf_counter()
+                results[name] = merge()
+                record["timings_seconds"][name] = time.perf_counter() - t
+                evaluated = M.evaluate(
+                    results[name], truths, ks=tuple(args.eval_ks), n_items=n_items
+                )
+                record["results"][name] = evaluated.metrics
+                print(f"[{name}] {evaluated}")
+                if "popularity" in results and args.bootstrap_samples:
+                    record.setdefault("paired_bootstrap_vs_popularity", {})[name] = {
+                        str(k): M.paired_recall_bootstrap(
+                            results["popularity"], results[name], truths, k,
+                            samples=args.bootstrap_samples, seed=args.seed) for k in args.eval_ks}
+        record["history_segments"] = {}
+        for label, low, high in (("1-4", 1, 5), ("5-9", 5, 10), ("10+", 10, float("inf"))):
+            idx = [u for u, h in enumerate(hists) if low <= len(h) < high]
+            if idx:
+                record["history_segments"][label] = {"n_users": len(idx), "results": {
+                    name: M.evaluate(recs[idx], [truths[u] for u in idx],
+                                     ks=tuple(args.eval_ks)).metrics
+                    for name, recs in results.items()}}
+        if args.examples:
+            record["examples"] = [
+                {"user_idx": users[u], "history_item_idx": hists[u],
+                 "truth_item_idx": sorted(truths[u]),
+                 "recommendations": {name: recs[u].tolist() for name, recs in results.items()}}
+                for u in range(min(args.examples, len(users)))]
+            record["examples_note"] = (
+                "Deterministic first N sampled users, not cherry-picked successes. "
+                "Integer IDs require the matching source maps; do not infer product names.")
+        record["status"] = "completed"
+        save_record(output, record)
+        print(f"結果已保存：{output}")
+        return 0
+    except Exception as exc:
+        record.update(status="failed", error=f"{type(exc).__name__}: {exc}")
+        save_record(output, record)
+        raise
+    finally:
+        con.close()
 
 
 if __name__ == "__main__":
