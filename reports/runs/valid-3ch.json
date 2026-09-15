@@ -1,0 +1,275 @@
+{
+  "created_utc": "2026-09-15T02:01:10.296609+00:00",
+  "argv": [
+    "scripts/06_recall_eval.py",
+    "--segment",
+    "valid",
+    "--k",
+    "500",
+    "--max-users",
+    "20000",
+    "--channels",
+    "popularity",
+    "covisitation",
+    "als",
+    "--output",
+    "<path>/valid-3ch.json",
+    "--memory-limit",
+    "40GB"
+  ],
+  "git_commit": "137de5be1759f77b9c5bfb14c74276c9f429e5b1",
+  "git_status": "?? reports/runs/valid-2ch.json",
+  "code_sha256": "777e3ae24effb3c9f1d59a147020de2a17b6fc744528476008c5b698b95e3de8",
+  "versions": {
+    "duckdb": "1.5.5",
+    "numpy": "2.5.3",
+    "scipy": "1.18.1",
+    "implicit": "0.7.3",
+    "pyarrow": "25.0.1",
+    "threadpoolctl": "3.6.0"
+  },
+  "python": "3.12.13",
+  "platform": "Windows-10-10.0.19045-SP0",
+  "source_directory": "<external>/interactions",
+  "source_files": [
+    {
+      "path": "year=1996/data_0.parquet",
+      "bytes": 1477,
+      "mtime_ns": 1789112598448940800
+    },
+    {
+      "path": "year=1997/data_0.parquet",
+      "bytes": 61539,
+      "mtime_ns": 1789112601310233800
+    },
+    {
+      "path": "year=1998/data_0.parquet",
+      "bytes": 372134,
+      "mtime_ns": 1789112597354796800
+    },
+    {
+      "path": "year=1999/data_0.parquet",
+      "bytes": 1002139,
+      "mtime_ns": 1789112599298465500
+    },
+    {
+      "path": "year=2000/data_0.parquet",
+      "bytes": 3511473,
+      "mtime_ns": 1789112598772016800
+    },
+    {
+      "path": "year=2001/data_0.parquet",
+      "bytes": 3601960,
+      "mtime_ns": 1789112598541365400
+    },
+    {
+      "path": "year=2002/data_0.parquet",
+      "bytes": 3905742,
+      "mtime_ns": 1789112598708215200
+    },
+    {
+      "path": "year=2003/data_0.parquet",
+      "bytes": 4226930,
+      "mtime_ns": 1789112598165704800
+    },
+    {
+      "path": "year=2004/data_0.parquet",
+      "bytes": 5220208,
+      "mtime_ns": 1789112598390223900
+    },
+    {
+      "path": "year=2005/data_0.parquet",
+      "bytes": 7421789,
+      "mtime_ns": 1789112597942144500
+    },
+    {
+      "path": "year=2006/data_0.parquet",
+      "bytes": 8392388,
+      "mtime_ns": 1789112598275106200
+    },
+    {
+      "path": "year=2007/data_0.parquet",
+      "bytes": 13115986,
+      "mtime_ns": 1789112597465159400
+    },
+    {
+      "path": "year=2008/data_0.parquet",
+      "bytes": 15150126,
+      "mtime_ns": 1789112598077585000
+    },
+    {
+      "path": "year=2009/data_0.parquet",
+      "bytes": 19529902,
+      "mtime_ns": 1789112597968154600
+    },
+    {
+      "path": "year=2010/data_0.parquet",
+      "bytes": 27612835,
+      "mtime_ns": 1789112598018990000
+    },
+    {
+      "path": "year=2011/data_0.parquet",
+      "bytes": 44760440,
+      "mtime_ns": 1789112597823216900
+    },
+    {
+      "path": "year=2012/data_0.parquet",
+      "bytes": 85168162,
+      "mtime_ns": 1789112597624589400
+    },
+    {
+      "path": "year=2013/data_0.parquet",
+      "bytes": 217855156,
+      "mtime_ns": 1789112597664859900
+    },
+    {
+      "path": "year=2014/data_0.parquet",
+      "bytes": 346409813,
+      "mtime_ns": 1789112597551190700
+    },
+    {
+      "path": "year=2015/data_0.parquet",
+      "bytes": 485970034,
+      "mtime_ns": 1789112595904665100
+    },
+    {
+      "path": "year=2016/data_0.parquet",
+      "bytes": 569910478,
+      "mtime_ns": 1789112595866579700
+    },
+    {
+      "path": "year=2017/data_0.parquet",
+      "bytes": 554602112,
+      "mtime_ns": 1789112597405972600
+    },
+    {
+      "path": "year=2018/data_0.parquet",
+      "bytes": 581985921,
+      "mtime_ns": 1789112597377865900
+    },
+    {
+      "path": "year=2019/data_0.parquet",
+      "bytes": 733281466,
+      "mtime_ns": 1789112597495532400
+    },
+    {
+      "path": "year=2020/data_0.parquet",
+      "bytes": 816593369,
+      "mtime_ns": 1789112595796412200
+    },
+    {
+      "path": "year=2021/data_0.parquet",
+      "bytes": 839737983,
+      "mtime_ns": 1789112595834977200
+    },
+    {
+      "path": "year=2022/data_0.parquet",
+      "bytes": 720245298,
+      "mtime_ns": 1789112595871579800
+    },
+    {
+      "path": "year=2023/data_0.parquet",
+      "bytes": 284353642,
+      "mtime_ns": 1789112597516657300
+    }
+  ],
+  "source_inventory_sha256": "1e5578409a898a1d858541a1962e06945b83a4b7d0837937578626a017a9d1cf",
+  "source_fingerprint_note": "檔案清單、大小與修改時間指紋；不是資料內容 SHA256。",
+  "status": "running",
+  "parameters": {
+    "src": "<external>/interactions",
+    "segment": "valid",
+    "k": 500,
+    "eval_ks": [
+      10,
+      100,
+      500
+    ],
+    "max_users": 20000,
+    "seed": 42,
+    "examples": 0,
+    "channels": [
+      "popularity",
+      "covisitation",
+      "als"
+    ],
+    "weights": null,
+    "rrf_constant": 60.0,
+    "bootstrap_samples": 1000,
+    "memory_limit": "40GB",
+    "temp_dir": "<external>/duckdb_tmp",
+    "output": "reports/runs/valid-3ch.json"
+  },
+  "results": {
+    "popularity": {
+      "recall@10": 0.0024614626782754412,
+      "ndcg@10": 0.0017433344997355128,
+      "recall@100": 0.009023873805189445,
+      "ndcg@100": 0.003119371075292936,
+      "recall@500": 0.0253184809472706,
+      "ndcg@500": 0.005439586503674389,
+      "coverage": 1.0722682580847757e-05
+    },
+    "covisitation": {
+      "recall@10": 0.0022946716944310546,
+      "ndcg@10": 0.001682393893369251,
+      "recall@100": 0.0056992167980958065,
+      "ndcg@100": 0.0025136564301205355,
+      "recall@500": 0.006344647830088271,
+      "ndcg@500": 0.002630061572952921,
+      "coverage": 0.0011550253723626007
+    }
+  },
+  "timings_seconds": {
+    "eval_set": 13.09425900000042,
+    "popularity_fit": 1.2326199999997698,
+    "popularity_recommend": 6.299016200000551,
+    "covisitation_fit": 34.49521780000032,
+    "covisitation_recommend": 0.8113988999994035
+  },
+  "channel_parameters": {
+    "popularity": {
+      "window_days": 90,
+      "pool_size": 2000,
+      "name": "popularity"
+    },
+    "covisitation": {
+      "window_days": 365,
+      "max_items_per_user": 20,
+      "top_n_neighbours": 50,
+      "min_cooccurrence": 3,
+      "name": "covisitation"
+    }
+  },
+  "protocol": "future-window unseen review interactions; macro user average",
+  "weights_note": "equal weights; not tuned",
+  "split": {
+    "train_end": "2023-03-01",
+    "valid_end": "2023-06-01",
+    "test_end_exclusive": "2023-09-10",
+    "feature_cutoff_exclusive": "2023-03-01"
+  },
+  "sample": {
+    "method": "hash top-N among qualified users",
+    "n_users": 20000,
+    "seed": 42,
+    "user_ids_sha256": "4176b658df5f297c59a466e04c7508733a660f293a07d070c7290e715bccfc3e",
+    "mean_history": 21.4791,
+    "mean_truth": 2.2188
+  },
+  "catalogue": {
+    "n_items_before_cutoff": 47282944,
+    "n_items_all_dates": 48185153,
+    "truth_interactions": 44376,
+    "cold_truth_interactions": 5998,
+    "cold_truth_fraction_micro": 0.13516315125292952,
+    "train_catalogue_recall_ceiling_macro": 0.8967486724849154,
+    "coverage_denominator": "distinct items with ts < feature_cutoff"
+  },
+  "channel_stats": {
+    "covisitation": {
+      "edges": 455840,
+      "items_with_neighbours": 116485
+    }
+  }
+}
