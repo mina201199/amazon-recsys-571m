@@ -29,6 +29,7 @@ from amazon_recsys.evaluation.experiment import (
 )
 from amazon_recsys.recall import base
 from amazon_recsys.recall.als import ALSRecall
+from amazon_recsys.recall.content import ContentRecall
 from amazon_recsys.recall.covisitation import CoVisitationRecall
 from amazon_recsys.recall.popularity import PopularityRecall
 
@@ -38,6 +39,13 @@ CHANNELS = {
         window_days=365, max_items_per_user=20, top_n_neighbours=50, min_cooccurrence=3),
     "als": lambda k: ALSRecall(
         factors=32, iterations=10, min_user_interactions=10, min_item_interactions=5),
+    # 唯一碰得到冷啟動商品的通道：其餘三路都需要商品已經被買過。
+    # 需先執行 scripts/09_build_items.py 產生屬性表。
+    "content": lambda k: ContentRecall(
+        items_table=(
+            f"read_parquet('{(config.ITEMS_DIR / 'items.parquet').as_posix()}')"
+        ),
+        per_store=200, per_category=400, cold_slots=50),
 }
 
 
