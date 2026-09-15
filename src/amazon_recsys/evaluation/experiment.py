@@ -104,3 +104,70 @@ def catalogue_diagnostics(con, src: str, cutoff: int, truths: list[set[int]]) ->
             "cold_truth_fraction_micro": cold / total,
             "train_catalogue_recall_ceiling_macro": ceiling,
             "coverage_denominator": "distinct items with ts < feature_cutoff"}
+
+
+def channel_reachability(
+    con, src: str, cutoff: int, truths: list[set[int]],
+    histories: list[list[int]], covis_table: str | None = None,
+) -> dict:
+    """答案落在各通道可及範圍內的比例，補 catalogue_diagnostics 未涵蓋的部分。
+
+    catalogue_diagnostics 回答的是「答案在訓練期出現過嗎」（理論上限）。
+    這裡再往下問兩題，因為兩者要修的東西完全不同：
+
+    * **在共現圖裡嗎** —— 若答案大多不在圖內，共現通道無論權重怎麼調
+      都撈不到，該修的是圖的覆蓋率而非融合。
+    * **跨類別嗎** —— 使用者跳到從未買過的類別時，共現與 ALS 都只能
+      靠間接關聯，是已知的弱項。
+
+    兩者皆以互動為單位（micro），與 catalogue_diagnostics 的 micro 欄位可比。
+    """
+    rows_u = [u for u, truth in enumerate(truths) for _ in truth]
+    rows_i = [i for truth in truths for i in sorted(truth)]
+    if not rows_i:
+        return {"truth_interactions": 0}
+
+    con.register("reach_truth_arrow", pa.table({
+        "row_id": pa.array(rows_u, pa.int64()),
+        "item_idx": pa.array(rows_i, pa.int64()),
+    }))
+    hist_u = [u for u, h in enumerate(histories) for _ in h]
+    hist_i = [int(i) for h in histories for i in h]
+    con.register("reach_hist_arrow", pa.table({
+        "row_id": pa.array(hist_u, pa.int64()),
+        "item_idx": pa.array(hist_i, pa.int64()),
+    }))
+    try:
+        con.execute(f"""CREATE OR REPLACE TEMP TABLE reach_hist_cat AS
+            SELECT DISTINCT h.row_id, s.category_idx
+            FROM reach_hist_arrow h
+            JOIN (SELECT DISTINCT item_idx, category_idx FROM {src}) s USING (item_idx)""")
+        con.execute(f"""CREATE OR REPLACE TEMP TABLE reach_truth_cat AS
+            SELECT t.row_id, t.item_idx, s.category_idx
+            FROM reach_truth_arrow t
+            JOIN (SELECT DISTINCT item_idx, category_idx FROM {src}) s USING (item_idx)""")
+        total, same_cat = con.execute("""
+            SELECT count(*),
+                   count(*) FILTER (WHERE EXISTS (
+                       SELECT 1 FROM reach_hist_cat h
+                       WHERE h.row_id = t.row_id AND h.category_idx = t.category_idx))
+            FROM reach_truth_cat t
+        """).fetchone()
+        in_graph = None
+        if covis_table:
+            in_graph = con.execute(f"""
+                SELECT count(*) FROM reach_truth_arrow t
+                WHERE EXISTS (SELECT 1 FROM {covis_table} c WHERE c.dst = t.item_idx)
+            """).fetchone()[0]
+    finally:
+        con.unregister("reach_truth_arrow")
+        con.unregister("reach_hist_arrow")
+
+    out = {
+        "truth_interactions": int(total),
+        "same_category_micro": same_cat / total if total else None,
+        "cross_category_micro": (total - same_cat) / total if total else None,
+    }
+    if in_graph is not None:
+        out["in_covisitation_graph_micro"] = in_graph / len(rows_i)
+    return out
