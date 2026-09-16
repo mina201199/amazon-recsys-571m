@@ -34,19 +34,22 @@ from amazon_recsys.recall.covisitation import CoVisitationRecall
 from amazon_recsys.recall.popularity import PopularityRecall
 
 CHANNELS = {
-    "popularity": lambda k: PopularityRecall(window_days=90, pool_size=max(2000, k * 4)),
-    "covisitation": lambda k: CoVisitationRecall(
+    "popularity": lambda k, items: PopularityRecall(
+        window_days=90, pool_size=max(2000, k * 4)),
+    "covisitation": lambda k, items: CoVisitationRecall(
         window_days=365, max_items_per_user=20, top_n_neighbours=50, min_cooccurrence=3),
-    "als": lambda k: ALSRecall(
+    "als": lambda k, items: ALSRecall(
         factors=32, iterations=10, min_user_interactions=10, min_item_interactions=5),
     # 唯一碰得到冷啟動商品的通道：其餘三路都需要商品已經被買過。
-    # 需先執行 scripts/09_build_items.py 產生屬性表。
-    "content": lambda k: ContentRecall(
-        items_table=(
-            f"read_parquet('{(config.ITEMS_DIR / 'items.parquet').as_posix()}')"
-        ),
-        per_store=200, per_category=400, cold_slots=50),
+    # 需先執行 scripts/09_build_items.py 產生屬性表，並以 --items 明確指定。
+    "content": lambda k, items: ContentRecall(
+        items_table=items, per_store=200, per_category=400, cold_slots=50),
 }
+
+# 預設不含 content：它需要一張本腳本無從驗證的外部屬性表。
+# 屬性表若與 --src 不是同一份 item_map，item_idx 會指向完全不同的商品，
+# 而且不會報錯——因此改為必須以 --items 明確指定，不提供全域路徑回退。
+DEFAULT_CHANNELS = ("popularity", "covisitation", "als")
 
 
 def main() -> int:
@@ -60,7 +63,11 @@ def main() -> int:
     ap.add_argument("--max-users", type=int, default=None, help="合格使用者的嚴格人數上限")
     ap.add_argument("--seed", type=int, default=42)
     ap.add_argument("--examples", type=int, default=0, help="另存前 N 位的整數 ID 範例；預設不輸出")
-    ap.add_argument("--channels", nargs="+", default=list(CHANNELS), choices=list(CHANNELS))
+    ap.add_argument("--channels", nargs="+", default=list(DEFAULT_CHANNELS),
+                    choices=list(CHANNELS))
+    ap.add_argument("--items", type=Path,
+                    help="商品屬性表 parquet；--channels 含 content 時必填。"
+                         "必須與 --src 出自同一份 item_map")
     ap.add_argument("--weights", type=float, nargs="+", help="依 --channels 順序；只在 valid 調整")
     ap.add_argument("--rrf-constant", type=float, default=60.0)
     ap.add_argument("--bootstrap-samples", type=int, default=1000)
@@ -78,6 +85,11 @@ def main() -> int:
         ap.error("bootstrap-samples 不可為負")
     if len(set(args.channels)) != len(args.channels):
         ap.error("channels 不可重複")
+    if "content" in args.channels and args.items is None:
+        ap.error("--channels 含 content 時必須指定 --items；"
+                 "屬性表與 --src 必須出自同一份 item_map，否則 item_idx 指向不同商品")
+    if args.items is not None and not args.items.is_file():
+        ap.error(f"找不到商品屬性表：{args.items}")
     weights = args.weights or [1.0] * len(args.channels)
     try:
         base.weighted_rrf([np.empty((0, args.k), dtype=int) for _ in args.channels],
@@ -107,6 +119,10 @@ def main() -> int:
         con.execute(f"SET temp_directory='{temp}'")
         path = args.src.as_posix().replace("'", "''")
         src = f"read_parquet('{path}/**/*.parquet', hive_partitioning=true)"
+        items_table = (
+            f"read_parquet('{args.items.as_posix().replace(chr(39), chr(39) * 2)}')"
+            if args.items is not None else None
+        )
         split = S.DEFAULT_SPLIT
         cutoff = split.feature_cutoff(args.segment)
         record["split"] = {"train_end": S.to_date(split.train_end),
@@ -130,7 +146,7 @@ def main() -> int:
         n_items = record["catalogue"]["n_items_before_cutoff"]
         results = {}
         for name in args.channels:
-            channel = CHANNELS[name](args.k)
+            channel = CHANNELS[name](args.k, items_table)
             record["channel_parameters"][name] = {
                 f.name: getattr(channel, f.name) for f in fields(channel)
                 if not f.name.startswith("_")}
