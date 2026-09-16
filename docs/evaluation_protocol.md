@@ -57,12 +57,20 @@ uv sync --frozen --extra dev
 uv run pytest -m 'not network' -ra
 uv run python scripts/06_recall_eval.py --segment valid --max-users 20000 --seed 42 --channels popularity covisitation --weights 1 1 --output reports/runs/valid-two-channel.json
 uv run python scripts/06_recall_eval.py --segment valid --max-users 20000 --seed 42 --channels popularity covisitation als --weights 1 1 1 --output reports/runs/valid-three-channel.json
+uv run python scripts/06_recall_eval.py --segment valid --max-users 20000 --seed 42 --channels popularity covisitation content --weights 1 1 0.25 --items D:/amazon-reviews-2023/parquet/items/items.parquet --output reports/runs/valid-content-w025.json
 ```
+
+`--channels` 預設為 `popularity covisitation als`；content 不在預設清單，
+必須明確指定並搭配 `--items`。屬性表與 `--src` 必須出自同一份 `item_map`——
+先前 items_table 綁死在全域設定路徑，用合成展示資料評估時會靜靜載入正式目錄的
+商品表，item_idx 指向完全不同的商品且不報錯。現已移除該回退路徑。
 
 每次評估同時輸出 round-robin 與 RRF，避免替換融合方式後遺失對照。
 可在 valid 改 weights（例如 1 / 0.5 / 0.25）做預先規劃的小型比較，這些值只是候選，並未優化。
 選定設定後記錄理由與檔名，鎖定設定，再以 `--segment test` 執行一次。
-本次修正環境缺少原始全量資料，沒有替使用者選出勝出權重，也沒有執行 test。
+valid 上已比較等權 1／1／1 與 1／1／0.25（內容式通道），0.25 在 Recall@10 與
+Recall@500 都較佳且保住候選聯集上限，暫定為選用設定。權重 0.5 與 0.15 的兩次
+執行沒有跑完，`status` 仍是 `running`，因此這不是完整掃描。test 尚未執行。
 
 舊的 21,317 人結果缺少原始命令；禁止補寫推測的 max-users、seed 或 CI。
 要比較新舊 ALS，可另外保存舊 commit 的結果與新結果，使用完全相同的新抽樣協定；
