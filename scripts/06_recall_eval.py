@@ -23,12 +23,14 @@ from amazon_recsys.evaluation import metrics as M
 from amazon_recsys.evaluation import splits as S
 from amazon_recsys.evaluation.experiment import (
     catalogue_diagnostics,
+    channel_reachability,
     provenance,
     public_path,
     save_record,
 )
 from amazon_recsys.recall import base
 from amazon_recsys.recall.als import ALSRecall
+from amazon_recsys.recall.category_popularity import CategoryPopularityRecall
 from amazon_recsys.recall.content import ContentRecall
 from amazon_recsys.recall.covisitation import CoVisitationRecall
 from amazon_recsys.recall.popularity import PopularityRecall
@@ -36,6 +38,9 @@ from amazon_recsys.recall.popularity import PopularityRecall
 CHANNELS = {
     "popularity": lambda k, items: PopularityRecall(
         window_days=90, pool_size=max(2000, k * 4)),
+    # 熱度限制在使用者買過的類別內；只需要 --src 既有的 category_idx 欄位。
+    "category_popularity": lambda k, items: CategoryPopularityRecall(
+        window_days=90, per_category=max(2000, k * 4)),
     "covisitation": lambda k, items: CoVisitationRecall(
         window_days=365, max_items_per_user=20, top_n_neighbours=50, min_cooccurrence=3),
     "als": lambda k, items: ALSRecall(
@@ -46,6 +51,7 @@ CHANNELS = {
         items_table=items, per_store=200, per_category=400, cold_slots=50),
 }
 
+# 預設不含 category_popularity：它需要 category_idx 欄位，合成展示資料沒有。
 # 預設不含 content：它需要一張本腳本無從驗證的外部屬性表。
 # 屬性表若與 --src 不是同一份 item_map，item_idx 會指向完全不同的商品，
 # 而且不會報錯——因此改為必須以 --items 明確指定，不提供全域路徑回退。
@@ -145,6 +151,7 @@ def main() -> int:
         record["catalogue"] = catalogue_diagnostics(con, src, cutoff, truths)
         n_items = record["catalogue"]["n_items_before_cutoff"]
         results = {}
+        covis_table = None
         for name in args.channels:
             channel = CHANNELS[name](args.k, items_table)
             record["channel_parameters"][name] = {
@@ -160,9 +167,21 @@ def main() -> int:
             record["results"][name] = evaluated.metrics
             if hasattr(channel, "stats"):
                 record.setdefault("channel_stats", {})[name] = channel.stats()
+            if name == "covisitation":
+                covis_table = channel._table
             print(f"[{name}] {evaluated}")
             save_record(output, record)
             del channel
+        # 答案落在各通道可及範圍內的比例。catalogue_diagnostics 只回答
+        # 「答案在訓練期出現過嗎」，這裡再問「在共現圖裡嗎、跨類別嗎」——
+        # 兩者要修的東西完全不同，缺口在哪決定了下一步該動哪一層。
+        columns = {row[0] for row in con.execute(f"DESCRIBE SELECT * FROM {src}").fetchall()}
+        if "category_idx" in columns:
+            record["reachability"] = channel_reachability(
+                con, src, cutoff, truths, hists, covis_table=covis_table)
+        else:
+            record["reachability"] = {"skipped": "來源缺少 category_idx 欄位"}
+        save_record(output, record)
         if len(results) > 1:
             candidates = list(results.values())
             record["union_recall_ceiling"] = float(np.mean([

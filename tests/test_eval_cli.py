@@ -99,3 +99,56 @@ def test_content_channel_requires_explicit_items_table(tmp_path):
         env={**os.environ, "PYTHONUTF8": "1"})
     assert result.returncode != 0
     assert "--items" in result.stdout + result.stderr
+
+
+def test_records_channel_reachability_diagnostics(tmp_path):
+    """答案落在各通道可及範圍的診斷必須實際寫進紀錄。
+
+    channel_reachability 早就寫好了，卻沒有任何地方呼叫——而它回答的正是
+    目前最該問的問題：Recall@500 只有 3%、理論上限卻有 90%，缺口在哪裡。
+    """
+    source = tmp_path / "interactions"
+    source.mkdir()
+    with duckdb.connect() as con:
+        con.execute("CREATE TABLE inter(user_idx INT, item_idx INT, category_idx INT, ts BIGINT)")
+        con.executemany("INSERT INTO inter VALUES (?, ?, ?, ?)", [
+            (1, 1, 7, ts("2023-02-01")), (2, 2, 7, ts("2023-02-01")),
+            (1, 2, 7, ts("2023-04-01")), (2, 3, 8, ts("2023-04-01"))])
+        con.execute(f"COPY inter TO '{(source / 'part.parquet').as_posix()}' (FORMAT PARQUET)")
+    output = tmp_path / "run.json"
+    result = subprocess.run(
+        [sys.executable, str(ROOT / "scripts/06_recall_eval.py"), "--src", str(source),
+         "--k", "2", "--eval-ks", "1", "2", "--channels", "popularity", "covisitation",
+         "--bootstrap-samples", "20", "--temp-dir", str(tmp_path / "tmp"),
+         "--output", str(output)],
+        capture_output=True, text=True, encoding="utf-8", cwd=ROOT,
+        env={**os.environ, "PYTHONUTF8": "1"})
+    assert result.returncode == 0, result.stdout + result.stderr
+    reach = json.loads(output.read_text(encoding="utf-8"))["reachability"]
+    assert reach["truth_interactions"] > 0
+    assert 0.0 <= reach["same_category_micro"] <= 1.0
+    assert reach["same_category_micro"] + reach["cross_category_micro"] == 1.0
+    assert 0.0 <= reach["in_covisitation_graph_micro"] <= 1.0
+
+
+def test_reachability_reports_why_it_was_skipped_without_categories(tmp_path):
+    """來源沒有 category_idx 時要明說跳過原因，不能默默不寫。"""
+    source = tmp_path / "interactions"
+    source.mkdir()
+    with duckdb.connect() as con:
+        con.execute("CREATE TABLE inter(user_idx INT, item_idx INT, ts BIGINT)")
+        con.executemany("INSERT INTO inter VALUES (?, ?, ?)", [
+            (1, 1, ts("2023-02-01")), (2, 2, ts("2023-02-01")),
+            (1, 2, ts("2023-04-01")), (2, 3, ts("2023-04-01"))])
+        con.execute(f"COPY inter TO '{(source / 'part.parquet').as_posix()}' (FORMAT PARQUET)")
+    output = tmp_path / "run.json"
+    result = subprocess.run(
+        [sys.executable, str(ROOT / "scripts/06_recall_eval.py"), "--src", str(source),
+         "--k", "2", "--eval-ks", "2", "--channels", "popularity",
+         "--bootstrap-samples", "0", "--temp-dir", str(tmp_path / "tmp"),
+         "--output", str(output)],
+        capture_output=True, text=True, encoding="utf-8", cwd=ROOT,
+        env={**os.environ, "PYTHONUTF8": "1"})
+    assert result.returncode == 0, result.stdout + result.stderr
+    record = json.loads(output.read_text(encoding="utf-8"))
+    assert "category_idx" in record["reachability"]["skipped"]
