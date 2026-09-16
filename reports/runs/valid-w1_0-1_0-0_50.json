@@ -1,0 +1,523 @@
+{
+  "created_utc": "2026-09-16T08:00:01.981182+00:00",
+  "argv": [
+    "scripts/06_recall_eval.py",
+    "--segment",
+    "valid",
+    "--k",
+    "500",
+    "--max-users",
+    "20000",
+    "--channels",
+    "popularity",
+    "covisitation",
+    "content",
+    "--weights",
+    "1.0",
+    "1.0",
+    "0.5",
+    "--items",
+    "D:/amazon-reviews-2023/parquet/items/items.parquet",
+    "--memory-limit",
+    "16GB",
+    "--output",
+    "<path>/valid-w1_0-1_0-0_50.json"
+  ],
+  "git_commit": "5e107b96cfb879d883543448ea6766177790a31a",
+  "git_status": "?? reports/runs/valid-w1_0-0_8-0_15.json",
+  "code_sha256": "51ee95620465b0f4d664a264c29e8301cdb5c30850032407282d25ed312f702a",
+  "versions": {
+    "duckdb": "1.5.5",
+    "numpy": "2.5.3",
+    "scipy": "1.18.1",
+    "implicit": "0.7.3",
+    "pyarrow": "25.0.1",
+    "threadpoolctl": "3.6.0"
+  },
+  "python": "3.12.13",
+  "platform": "Windows-10-10.0.19045-SP0",
+  "source_directory": "<external>/interactions",
+  "source_files": [
+    {
+      "path": "year=1996/data_0.parquet",
+      "bytes": 1477,
+      "mtime_ns": 1789112598448940800
+    },
+    {
+      "path": "year=1997/data_0.parquet",
+      "bytes": 61539,
+      "mtime_ns": 1789112601310233800
+    },
+    {
+      "path": "year=1998/data_0.parquet",
+      "bytes": 372134,
+      "mtime_ns": 1789112597354796800
+    },
+    {
+      "path": "year=1999/data_0.parquet",
+      "bytes": 1002139,
+      "mtime_ns": 1789112599298465500
+    },
+    {
+      "path": "year=2000/data_0.parquet",
+      "bytes": 3511473,
+      "mtime_ns": 1789112598772016800
+    },
+    {
+      "path": "year=2001/data_0.parquet",
+      "bytes": 3601960,
+      "mtime_ns": 1789112598541365400
+    },
+    {
+      "path": "year=2002/data_0.parquet",
+      "bytes": 3905742,
+      "mtime_ns": 1789112598708215200
+    },
+    {
+      "path": "year=2003/data_0.parquet",
+      "bytes": 4226930,
+      "mtime_ns": 1789112598165704800
+    },
+    {
+      "path": "year=2004/data_0.parquet",
+      "bytes": 5220208,
+      "mtime_ns": 1789112598390223900
+    },
+    {
+      "path": "year=2005/data_0.parquet",
+      "bytes": 7421789,
+      "mtime_ns": 1789112597942144500
+    },
+    {
+      "path": "year=2006/data_0.parquet",
+      "bytes": 8392388,
+      "mtime_ns": 1789112598275106200
+    },
+    {
+      "path": "year=2007/data_0.parquet",
+      "bytes": 13115986,
+      "mtime_ns": 1789112597465159400
+    },
+    {
+      "path": "year=2008/data_0.parquet",
+      "bytes": 15150126,
+      "mtime_ns": 1789112598077585000
+    },
+    {
+      "path": "year=2009/data_0.parquet",
+      "bytes": 19529902,
+      "mtime_ns": 1789112597968154600
+    },
+    {
+      "path": "year=2010/data_0.parquet",
+      "bytes": 27612835,
+      "mtime_ns": 1789112598018990000
+    },
+    {
+      "path": "year=2011/data_0.parquet",
+      "bytes": 44760440,
+      "mtime_ns": 1789112597823216900
+    },
+    {
+      "path": "year=2012/data_0.parquet",
+      "bytes": 85168162,
+      "mtime_ns": 1789112597624589400
+    },
+    {
+      "path": "year=2013/data_0.parquet",
+      "bytes": 217855156,
+      "mtime_ns": 1789112597664859900
+    },
+    {
+      "path": "year=2014/data_0.parquet",
+      "bytes": 346409813,
+      "mtime_ns": 1789112597551190700
+    },
+    {
+      "path": "year=2015/data_0.parquet",
+      "bytes": 485970034,
+      "mtime_ns": 1789112595904665100
+    },
+    {
+      "path": "year=2016/data_0.parquet",
+      "bytes": 569910478,
+      "mtime_ns": 1789112595866579700
+    },
+    {
+      "path": "year=2017/data_0.parquet",
+      "bytes": 554602112,
+      "mtime_ns": 1789112597405972600
+    },
+    {
+      "path": "year=2018/data_0.parquet",
+      "bytes": 581985921,
+      "mtime_ns": 1789112597377865900
+    },
+    {
+      "path": "year=2019/data_0.parquet",
+      "bytes": 733281466,
+      "mtime_ns": 1789112597495532400
+    },
+    {
+      "path": "year=2020/data_0.parquet",
+      "bytes": 816593369,
+      "mtime_ns": 1789112595796412200
+    },
+    {
+      "path": "year=2021/data_0.parquet",
+      "bytes": 839737983,
+      "mtime_ns": 1789112595834977200
+    },
+    {
+      "path": "year=2022/data_0.parquet",
+      "bytes": 720245298,
+      "mtime_ns": 1789112595871579800
+    },
+    {
+      "path": "year=2023/data_0.parquet",
+      "bytes": 284353642,
+      "mtime_ns": 1789112597516657300
+    }
+  ],
+  "source_inventory_sha256": "1e5578409a898a1d858541a1962e06945b83a4b7d0837937578626a017a9d1cf",
+  "source_fingerprint_note": "檔案清單、大小與修改時間指紋；不是資料內容 SHA256。",
+  "status": "completed",
+  "parameters": {
+    "src": "<external>/interactions",
+    "segment": "valid",
+    "k": 500,
+    "eval_ks": [
+      10,
+      100,
+      500
+    ],
+    "max_users": 20000,
+    "seed": 42,
+    "examples": 0,
+    "channels": [
+      "popularity",
+      "covisitation",
+      "content"
+    ],
+    "items": "<external>/items.parquet",
+    "weights": [
+      1.0,
+      1.0,
+      0.5
+    ],
+    "rrf_constant": 60.0,
+    "bootstrap_samples": 1000,
+    "memory_limit": "16GB",
+    "temp_dir": "<external>/duckdb_tmp",
+    "output": "reports/runs/valid-w1_0-1_0-0_50.json"
+  },
+  "results": {
+    "popularity": {
+      "recall@10": 0.0024614626782754412,
+      "ndcg@10": 0.0017433344997355128,
+      "recall@100": 0.009023873805189445,
+      "ndcg@100": 0.003119371075292936,
+      "recall@500": 0.0253184809472706,
+      "ndcg@500": 0.005439586503674389,
+      "coverage": 1.0722682580847757e-05
+    },
+    "covisitation": {
+      "recall@10": 0.0022946716944310546,
+      "ndcg@10": 0.001682393893369251,
+      "recall@100": 0.0056992167980958065,
+      "ndcg@100": 0.0025136564301205355,
+      "recall@500": 0.006344647830088271,
+      "ndcg@500": 0.002630061572952921,
+      "coverage": 0.0011550253723626007
+    },
+    "content": {
+      "recall@10": 0.0007880714055448099,
+      "ndcg@10": 0.0004725783280972073,
+      "recall@100": 0.003986165717633687,
+      "ndcg@100": 0.001206837514356018,
+      "recall@500": 0.010333026667565259,
+      "ndcg@500": 0.002162907175140042,
+      "coverage": 0.0527739981672884
+    },
+    "round_robin": {
+      "recall@10": 0.002709660806226385,
+      "ndcg@10": 0.002110708372693275,
+      "recall@100": 0.011745217215571153,
+      "ndcg@100": 0.004093925666542757,
+      "recall@500": 0.027444069175564426,
+      "ndcg@500": 0.006344531442816178,
+      "coverage": 0.03263542557756133
+    },
+    "weighted_rrf": {
+      "recall@10": 0.004064391031078512,
+      "ndcg@10": 0.002689023783688401,
+      "recall@100": 0.012679452470860102,
+      "ndcg@100": 0.004544018854330115,
+      "recall@500": 0.02928069439510739,
+      "ndcg@500": 0.00692336173897638,
+      "coverage": 0.021338011440235193
+    }
+  },
+  "timings_seconds": {
+    "eval_set": 15.340139200001431,
+    "popularity_fit": 1.108489099999133,
+    "popularity_recommend": 2.4240903000027174,
+    "covisitation_fit": 37.038810099998955,
+    "covisitation_recommend": 0.49972300000081304,
+    "content_fit": 137.08125239999936,
+    "content_recommend": 124.88044599999921,
+    "round_robin": 3.993181399997411,
+    "weighted_rrf": 9.967000000000553
+  },
+  "channel_parameters": {
+    "popularity": {
+      "window_days": 90,
+      "pool_size": 2000,
+      "name": "popularity"
+    },
+    "covisitation": {
+      "window_days": 365,
+      "max_items_per_user": 20,
+      "top_n_neighbours": 50,
+      "min_cooccurrence": 3,
+      "name": "covisitation"
+    },
+    "content": {
+      "items_table": "read_parquet('D:/amazon-reviews-2023/parquet/items/items.parquet')",
+      "per_store": 200,
+      "per_category": 400,
+      "cold_slots": 50,
+      "price_tolerance": 0.5,
+      "name": "content"
+    }
+  },
+  "protocol": "future-window unseen review interactions; macro user average",
+  "weights_note": "user-supplied",
+  "split": {
+    "train_end": "2023-03-01",
+    "valid_end": "2023-06-01",
+    "test_end_exclusive": "2023-09-10",
+    "feature_cutoff_exclusive": "2023-03-01"
+  },
+  "sample": {
+    "method": "hash top-N among qualified users",
+    "n_users": 20000,
+    "seed": 42,
+    "user_ids_sha256": "4176b658df5f297c59a466e04c7508733a660f293a07d070c7290e715bccfc3e",
+    "mean_history": 21.4791,
+    "mean_truth": 2.2188
+  },
+  "catalogue": {
+    "n_items_before_cutoff": 47282944,
+    "n_items_all_dates": 48185153,
+    "truth_interactions": 44376,
+    "cold_truth_interactions": 5998,
+    "cold_truth_fraction_micro": 0.13516315125292952,
+    "train_catalogue_recall_ceiling_macro": 0.8967486724849155,
+    "coverage_denominator": "distinct items with ts < feature_cutoff"
+  },
+  "channel_stats": {
+    "covisitation": {
+      "edges": 455840,
+      "items_with_neighbours": 116485
+    },
+    "content": {
+      "items_with_attributes": 35384420,
+      "cold_items": 770089,
+      "store_pool_rows": 23992441,
+      "category_pool_rows": 18502
+    }
+  },
+  "union_recall_ceiling": 0.03830237023395143,
+  "paired_bootstrap_vs_popularity": {
+    "round_robin": {
+      "10": {
+        "delta": 0.00024819812795094393,
+        "ci95_low": -0.000402638138484657,
+        "ci95_high": 0.000815600079854894,
+        "n_users": 20000,
+        "samples": 1000,
+        "seed": 42
+      },
+      "100": {
+        "delta": 0.0027213434103817084,
+        "ci95_low": 0.0015869452658346934,
+        "ci95_high": 0.0038499444858660636,
+        "n_users": 20000,
+        "samples": 1000,
+        "seed": 42
+      },
+      "500": {
+        "delta": 0.0021255882282938277,
+        "ci95_low": 0.0004657652474177015,
+        "ci95_high": 0.0037235723596563855,
+        "n_users": 20000,
+        "samples": 1000,
+        "seed": 42
+      }
+    },
+    "weighted_rrf": {
+      "10": {
+        "delta": 0.0016029283528030704,
+        "ci95_low": 0.000967156788679974,
+        "ci95_high": 0.002217537039797375,
+        "n_users": 20000,
+        "samples": 1000,
+        "seed": 42
+      },
+      "100": {
+        "delta": 0.0036555786656706567,
+        "ci95_low": 0.0026852358559103047,
+        "ci95_high": 0.004606186038821551,
+        "n_users": 20000,
+        "samples": 1000,
+        "seed": 42
+      },
+      "500": {
+        "delta": 0.003962213447836791,
+        "ci95_low": 0.0025506174269366772,
+        "ci95_high": 0.005309995800127917,
+        "n_users": 20000,
+        "samples": 1000,
+        "seed": 42
+      }
+    }
+  },
+  "history_segments": {
+    "1-4": {
+      "n_users": 6446,
+      "results": {
+        "popularity": {
+          "recall@10": 0.0016190236299231126,
+          "ndcg@10": 0.0012873714341571545,
+          "recall@100": 0.008012769505518198,
+          "ndcg@100": 0.0025863369515620412,
+          "recall@500": 0.027795490490535178,
+          "ndcg@500": 0.005317046973651943
+        },
+        "covisitation": {
+          "recall@10": 0.0015540024150014842,
+          "ndcg@10": 0.001238531225750239,
+          "recall@100": 0.00238914565628807,
+          "ndcg@100": 0.0014412738978069567,
+          "recall@500": 0.00238914565628807,
+          "ndcg@500": 0.0014412738978069567
+        },
+        "content": {
+          "recall@10": 0.0009825214603371598,
+          "ndcg@10": 0.0006252922723303064,
+          "recall@100": 0.0033634906307881793,
+          "ndcg@100": 0.0011678944735881583,
+          "recall@500": 0.00716020212239818,
+          "ndcg@500": 0.0017057771091576125
+        },
+        "round_robin": {
+          "recall@10": 0.0020197889624290594,
+          "ndcg@10": 0.001728002169536657,
+          "recall@100": 0.008614257168749577,
+          "ndcg@100": 0.003145863957473049,
+          "recall@500": 0.0242452558628882,
+          "ndcg@500": 0.005286760410224642
+        },
+        "weighted_rrf": {
+          "recall@10": 0.0032375984566890654,
+          "ndcg@10": 0.002233559112879937,
+          "recall@100": 0.010330626950586315,
+          "ndcg@100": 0.0036596005992316077,
+          "recall@500": 0.02841409224937895,
+          "ndcg@500": 0.006115550296346401
+        }
+      }
+    },
+    "5-9": {
+      "n_users": 4303,
+      "results": {
+        "popularity": {
+          "recall@10": 0.0035026780872702322,
+          "ndcg@10": 0.002048247153089644,
+          "recall@100": 0.011302174223569111,
+          "ndcg@100": 0.0037226506505241294,
+          "recall@500": 0.027758944048528328,
+          "ndcg@500": 0.006025352977021135
+        },
+        "covisitation": {
+          "recall@10": 0.0017397422986546855,
+          "ndcg@10": 0.0011374261388659753,
+          "recall@100": 0.00352531825341493,
+          "ndcg@100": 0.0015918291595689563,
+          "recall@500": 0.0036249165403243948,
+          "ndcg@500": 0.001620030899814914
+        },
+        "content": {
+          "recall@10": 0.0007609208515552926,
+          "ndcg@10": 0.0004632276382958945,
+          "recall@100": 0.003678182341324335,
+          "ndcg@100": 0.0011066588018759883,
+          "recall@500": 0.009688475799634479,
+          "ndcg@500": 0.001996442472468923
+        },
+        "round_robin": {
+          "recall@10": 0.0029274979803680713,
+          "ndcg@10": 0.0019570843998221814,
+          "recall@100": 0.013228524979225002,
+          "ndcg@100": 0.004215217714516427,
+          "recall@500": 0.02838886187294558,
+          "ndcg@500": 0.006358657435549468
+        },
+        "weighted_rrf": {
+          "recall@10": 0.004216004706941263,
+          "ndcg@10": 0.0027519514487166813,
+          "recall@100": 0.013474024696023811,
+          "ndcg@100": 0.004764071542373479,
+          "recall@500": 0.029379730110402007,
+          "ndcg@500": 0.007038346646625127
+        }
+      }
+    },
+    "10+": {
+      "n_users": 9251,
+      "results": {
+        "popularity": {
+          "recall@10": 0.0025641555980435234,
+          "ndcg@10": 0.0019192180553873636,
+          "recall@100": 0.00866867454190906,
+          "ndcg@100": 0.0032101748748118563,
+          "recall@500": 0.02245737228435897,
+          "ndcg@500": 0.005252507990617816
+        },
+        "covisitation": {
+          "recall@10": 0.0030688815490660915,
+          "ndcg@10": 0.002245158459697188,
+          "recall@100": 0.009016804520272271,
+          "ndcg@100": 0.0036896590837230394,
+          "recall@500": 0.010365853186500556,
+          "ndcg@500": 0.003928200946048126
+        },
+        "content": {
+          "recall@10": 0.0006652094209621055,
+          "ndcg@10": 0.00037051821931853384,
+          "recall@100": 0.004563294252718033,
+          "ndcg@100": 0.0012805696341907594,
+          "recall@500": 0.012843623295265304,
+          "ndcg@500": 0.0025588598311682086
+        },
+        "round_robin": {
+          "recall@10": 0.0030890317439397014,
+          "ndcg@10": 0.0024488305368714045,
+          "recall@100": 0.013236893267328732,
+          "ndcg@100": 0.004698107494910784,
+          "recall@500": 0.02923350898063197,
+          "ndcg@500": 0.007075004681315118
+        },
+        "weighted_rrf": {
+          "recall@10": 0.0045699700265684,
+          "ndcg@10": 0.002977116695310352,
+          "recall@100": 0.013946503062018395,
+          "ndcg@100": 0.005057917174048455,
+          "recall@500": 0.029838468338297622,
+          "ndcg@500": 0.007432752345568133
+        }
+      }
+    }
+  }
+}
