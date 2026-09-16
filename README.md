@@ -16,16 +16,17 @@
 ```mermaid
 flowchart LR
     A[評論 JSON] --> B[清理、整數編碼、Parquet]
-    B --> C[熱門 / 共現 / ALS]
+    B --> C[熱門 / 共現 / ALS / 內容]
     C --> D[Round-robin / 加權 RRF]
     D --> E[候選清單與離線評估]
     E -. 未實作 .-> F[LightGBM 精排與線上服務]
 ```
 
-- 已實作：下載與續傳、資料清理與品質報告、使用者抽樣、三路召回、時間切分、評估。
+- 已實作：下載與續傳、資料清理與品質報告、使用者抽樣、四路召回、時間切分、評估。
 - 本次修正：ALS 標準 fold-in、使用者／商品雙向分塊 Top-K、嚴格人數抽樣上限、
-  加權 RRF、JSON 實驗紀錄、冷商品診斷、paired bootstrap、三位使用者合成展示。
-- 尚待量測：修正後的全量品質與耗時、RRF 權重選擇、固定設定後的最終 test 結果。
+  加權 RRF、JSON 實驗紀錄、冷商品診斷、paired bootstrap、三位使用者合成展示、
+  內容式通道，以及把內容式通道的屬性表改成必須由 `--items` 明確指定。
+- 尚待量測：固定設定後的最終 test 結果。
 - 尚未實作：精排、模型持久化與部署、低延遲索引、線上監控與 A/B 實驗。
 
 ## 歷史全量工程結果
@@ -65,6 +66,59 @@ flowchart LR
 GROUP BY 的狀態隨 distinct key 數增加，排序與雜湊都可能 spill；實際記憶體還包括
 join、緩衝與執行器開銷。不能以「只有 GROUP BY 跑得完」作普遍結論。
 
+## 修正後的 valid 成績
+
+`--segment valid --max-users 20000 --seed 42`，候選 K=500，樣本指紋 `4176b658…`。
+四次執行共用同一批 20,000 位使用者，可直接相減；原始紀錄在 `reports/runs/`。
+
+| 單路通道 | Recall@10 | Recall@500 | NDCG@500 | coverage |
+|---|---:|---:|---:|---:|
+| 熱門 | 0.0025 | 0.0253 | 0.0054 | 0.00001 |
+| 共現 | 0.0023 | 0.0063 | 0.0026 | 0.0012 |
+| ALS（標準 fold-in） | 0.0011 | 0.0125 | 0.0028 | 0.0003 |
+| 內容 | 0.0008 | 0.0103 | 0.0022 | 0.0528 |
+
+沒有任何一路單獨贏過熱門。
+
+| 加權 RRF | Recall@10 | Recall@500 | NDCG@500 | 候選聯集上限 |
+|---|---:|---:|---:|---:|
+| 熱門＋共現 | 0.0039 | 0.0294 | 0.0068 | 0.0299 |
+| ＋ALS，等權 | 0.0025 | 0.0266 | 0.0060 | 0.0362 |
+| ＋內容，等權 | 0.0032 | 0.0275 | 0.0064 | 0.0383 |
+| ＋內容，權重 1／1／0.25 | **0.0040** | **0.0302** | **0.0070** | 0.0383 |
+
+**等權融合會被弱通道拖累。** 加入 ALS 或內容都讓候選聯集上限上升，實際交付的
+500 長度清單卻同時下降——等權 RRF 讓 Recall@500 只有熱門一半的通道，跟熱門搶
+同樣的前段名額。把內容降權到 0.25 後，Recall@500 比兩路基線高 2.9%、
+Recall@10 高 3.3%，同時保住升高的上限。這是目前最好的設定。
+
+對熱門的 paired bootstrap（同一批使用者、1,000 次重抽樣、95% percentile CI）：
+
+| 設定 | ΔRecall@500 | 95% CI |
+|---|---:|---|
+| 熱門＋共現 | +0.00406 | [+0.00327, +0.00493] |
+| ＋內容，權重 0.25 | +0.00491 | [+0.00383, +0.00602] |
+
+限制：CI 只衡量抽樣不確定性，未校正這次的權重挑選，也不代表線上收益。
+0.25 是在 valid 上與等權 1.0 比較後選定，**權重 0.5 與 0.15 的兩次執行沒有跑完**
+（`reports/runs/` 中 `status` 仍是 `running`），所以這不是完整的權重掃描。
+**test 尚未執行。** 候選聯集上限也不是等預算比較：三路聯集有 1,500 個候選，
+兩路只有 1,000 個，上限的 +27.9% 有一部分來自多出來的名額。
+
+Recall@500 約 3.0%，而 cutoff 前目錄的理論上限是 89.7%。召回缺口仍是這個系統
+最大的問題；精排救不回召回沒撈到的商品。
+
+### 內容式通道的已知偏誤
+
+冷啟動候選來自 `items.parquet`，而它是 metadata 與 `item_map` 的內連接，
+`item_map` 又建自**全時間範圍**的互動。因此「cutoff 前零互動」的冷商品，
+等於「未來某個時點一定會有互動」的商品：cutoff 後才首次出現的商品有 902,209 件，
+內容池的冷商品有 770,089 件，佔 85.4%。真實部署在 cutoff 當下無從得知哪些商品
+將來會被買，冷池會大得多。**這一路觸及冷商品的能力因此被系統性高估**，
+`build_items.py` 迴避了 `average_rating` 與 `rating_number` 的洩漏，
+但候選集合本身的構成方式仍條件在未來上。修正需要保留沒有任何互動的商品，
+這會改變 `item_map` 的語意，尚未實作。
+
 ## 歷史召回成績：不可當成修正後結果
 
 舊報告：valid 區間 `[2023-03-01, 2023-06-01)`，21,317 位使用者，候選 K=500。
@@ -101,7 +155,12 @@ RRF 已實作；預設等權不是調參結果，不宣稱一定優於 round-rob
   不能宣稱已量測到大型批次加速。
 - 新版可限制分數暫存，**仍需掃描全部模型商品因子**，計算複雜度未改成次線性。
   低延遲線上服務仍需預計算或 ANN，且應評估近似搜尋的 recall 損失。
-- 尚未重跑新版本全量耗時，不提供加速倍數。
+- 全量耗時已量到，而且**修正後更慢**：新版 fit 1,133 秒、recommend 10,597 秒
+  （20,000 位使用者，1,250 萬使用者 × 1,152 萬商品，factors=32）。
+  舊版近似法是 3,185.7 秒／21,317 位使用者，換算每位使用者 0.149 秒，
+  新版 0.530 秒——**每位使用者慢約 3.6 倍**。分塊精確 Top-K 是逐使用者、
+  逐區塊呼叫的，這是正確性換來的成本，尚未優化。
+  品質方面 Recall@500 從 0.0104 升到 0.0125，但兩者樣本不同，不是乾淨的比較。
 
 ## 快速開始
 
@@ -128,9 +187,15 @@ uv run python scripts/06_recall_eval.py --src reports/demo/interactions --k 10 -
 ```bash
 uv run python scripts/06_recall_eval.py --segment valid --max-users 20000 --seed 42 --channels popularity covisitation --weights 1 1 --output reports/runs/valid-two-channel.json
 uv run python scripts/06_recall_eval.py --segment valid --max-users 20000 --seed 42 --channels popularity covisitation als --weights 1 1 1 --output reports/runs/valid-three-channel.json
+uv run python scripts/06_recall_eval.py --segment valid --max-users 20000 --seed 42 --channels popularity covisitation content --weights 1 1 0.25 --items D:/amazon-reviews-2023/parquet/items/items.parquet --output reports/runs/valid-content-w025.json
 ```
 
-權重 1/1/1 是起點，請只在 valid 調參。凍結設定後才跑 test；不能因 test 分數低再調權重。
+內容式通道不在預設通道清單裡，必須同時給 `--channels content` 與 `--items`。
+`--items` 指向的屬性表必須與 `--src` 出自同一份 `item_map`，否則 item_idx 會指向
+完全不同的商品，而且不會報錯——腳本不再回退到全域設定路徑。
+
+權重只可在 valid 調整；目前選定的 1／1／0.25 是與等權比較後的結果，不是完整掃描。
+凍結設定後才跑 test；不能因 test 分數低再調權重。
 JSON 保存程式指紋、套件版本、實際參數、樣本指紋、通道結果與失敗狀態。
 更多命令與結果解讀見 [評估協定](docs/evaluation_protocol.md)。
 
@@ -153,7 +218,7 @@ coverage 改以 cutoff 前可見商品為分母，因此不與舊版全時間目
 ```text
 src/amazon_recsys/
   ingest/       下載、清理、抽樣
-  recall/       熱門、共現、ALS、融合
+  recall/       熱門、共現、ALS、內容、融合
   evaluation/   指標、時間切分、品質、實驗來源
   ranking/      尚未實作
 scripts/        資料管線、06_recall_eval.py、07_demo.py
