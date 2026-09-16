@@ -54,3 +54,48 @@ def test_eval_cli_writes_reproducible_record_and_preserves_existing_output(tmp_p
         capture_output=True, cwd=ROOT, env=env)
     assert failure.returncode != 0
     assert json.loads(failed_output.read_text(encoding="utf-8"))["status"] == "failed"
+
+
+def _load_eval_script():
+    """以模組方式載入評估腳本，才能檢查它的預設值而不必真的跑一次。"""
+    import importlib.util
+    spec = importlib.util.spec_from_file_location(
+        "eval_cli", ROOT / "scripts" / "06_recall_eval.py")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def test_default_channels_exclude_content():
+    """預設通道不得包含 content——它需要一張本 CLI 無從驗證的外部屬性表。
+
+    content 曾在預設清單裡，且 items_table 綁死在全域設定路徑，
+    於是 README 的合成展示指令會靜靜載入正式目錄的商品表。
+    """
+    module = _load_eval_script()
+    assert "content" in module.CHANNELS
+    assert "content" not in module.DEFAULT_CHANNELS
+
+
+def test_content_channel_requires_explicit_items_table(tmp_path):
+    """指定 content 卻沒給 --items 時必須當場失敗，不得回退到全域路徑。
+
+    回退是原始 bug 的成因：合成互動表配上正式商品表，item_idx 指向
+    完全不同的商品，而且不會有任何錯誤訊息。
+    """
+    source = tmp_path / "interactions"
+    source.mkdir()
+    with duckdb.connect() as con:
+        con.execute("CREATE TABLE inter(user_idx INT, item_idx INT, ts BIGINT)")
+        con.executemany("INSERT INTO inter VALUES (?, ?, ?)", [
+            (1, 1, ts("2023-02-01")), (2, 2, ts("2023-02-01")),
+            (1, 2, ts("2023-04-01")), (2, 3, ts("2023-04-01"))])
+        con.execute(f"COPY inter TO '{(source / 'part.parquet').as_posix()}' (FORMAT PARQUET)")
+    result = subprocess.run(
+        [sys.executable, str(ROOT / "scripts/06_recall_eval.py"), "--src", str(source),
+         "--k", "2", "--eval-ks", "2", "--channels", "content",
+         "--temp-dir", str(tmp_path / "tmp"), "--output", str(tmp_path / "run.json")],
+        capture_output=True, text=True, encoding="utf-8", cwd=ROOT,
+        env={**os.environ, "PYTHONUTF8": "1"})
+    assert result.returncode != 0
+    assert "--items" in result.stdout + result.stderr
