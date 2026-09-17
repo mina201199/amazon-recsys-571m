@@ -114,7 +114,7 @@ footer a { color: var(--series-1); }
 <p>2026-09-16 已在原機重跑全量 valid：20,000 位使用者，五次執行共用同一批樣本
 （指紋 <code>4176b658…</code>），權重掃描與可及性診斷均已完成，原始紀錄在
 <code>reports/runs/</code>。下方「歷史全量工程數字」與「歷史召回結果」仍沿用舊紀錄，
-未重新驗證。<strong>test 時間段尚未執行</strong>，不能把 valid 結果當成泛化或線上成效。
+未重新驗證。設定凍結後 <strong>test 已執行一次</strong>（見下），此後不再調整參數。
 <a href="legacy_results.json">歷史數據紀錄</a>保留未知欄位，不推測補填。</p></div>
 <div class="tiles"><div class="tile"><div class="n">5.71 億</div><div class="l">歷史紀錄：原始評論列數</div></div>
 <div class="tile"><div class="n">30.8 分鐘</div><div class="l">歷史紀錄：全量轉檔</div></div>
@@ -136,7 +136,35 @@ footer a { color: var(--series-1); }
 <p>資料包含 33 個正式類別加 Unknown，共 34 個檔案。
 舊報告中單類別與全量的單次互動使用者比例分別為 92.3% 與 19.2%。
 跨類別有助增加可評估歷史；這不代表所有單類別推薦任務都不可行。</p>
-<h2>修正後的 valid 結果</h2>
+<h2>最終 test 結果</h2>
+<p>權重在 valid 選定為 1／1／0.25 後凍結，test 只跑這一次，沒有回頭調整。
+test：歷史取 2023-06-01 之前，答案是 [2023-06-01, 2023-09-10) 內未曾互動過的商品。</p>
+<div class="tw"><table><thead><tr><th>加權 RRF 1／1／0.25</th><th>valid</th><th>test</th><th>變化</th></tr></thead><tbody>
+<tr><td>Recall@10</td><td class="num">0.00401</td><td class="num">0.00388</td><td class="num">−3.3%</td></tr>
+<tr><td>Recall@500</td><td class="num">0.03023</td><td class="num">0.02778</td><td class="num">−8.1%</td></tr>
+<tr><td>NDCG@500</td><td class="num">0.00703</td><td class="num">0.00629</td><td class="num">−10.5%</td></tr>
+</tbody></table></div>
+<p>絕對數字下降是預期的——0.25 是在 valid 上挑的。但熱門基線也一起下降，
+<strong>相對熱門的提升反而略為擴大</strong>：valid 是 0.02532 → 0.03023（+19.4%），
+test 是 0.02301 → 0.02778（<strong>+20.8%</strong>）。
+test 的 paired bootstrap 在 @10、@100、@500 全部不跨 0。</p>
+<div class="plain"><span class="k">test 不只是「比較晚的 valid」</span>
+<p>合格條件相同，但人群結構差很多：平均歷史長度從 21.5 掉到 <strong>4.8</strong>，
+答案落在使用者買過類別內的比例從 60.3% 掉到 <strong>35.0%</strong>。
+原因是 test 的 cutoff 是 2023-06-01，2023 上半年才開始評論的使用者也符合資格，
+而這批人根本不在 valid 的母體裡。提升在這種族群位移下仍然撐住，
+比兩段人群相同時更有說服力——但這是<strong>一次觀察</strong>，
+不能因此宣稱模型對任何族群都穩健。</p></div>
+<div class="tw"><table><thead><tr><th>單路 Recall@500</th><th>valid</th><th>test</th><th>變化</th></tr></thead><tbody>
+<tr><td>熱門</td><td class="num">0.02532</td><td class="num">0.02301</td><td class="num">−9.1%</td></tr>
+<tr><td>共現</td><td class="num">0.00634</td><td class="num">0.00247</td><td class="num"><strong>−61.1%</strong></td></tr>
+<tr><td>內容</td><td class="num">0.01033</td><td class="num">0.01219</td><td class="num">+18.0%</td></tr>
+</tbody></table></div>
+<p class="gloss">共現幾乎崩掉：歷史從 21.5 筆掉到 4.8 筆，可查鄰居的起點就少了一大半，
+再加上共現圖本來只覆蓋約 20% 的答案。內容式反而變好，因為薄歷史使用者更依賴屬性——
+但這一路有已知的冷啟動偏誤，不能單看這個數字。<strong>此後不再依 test 分數調整參數。</strong></p>
+
+<h2>權重是怎麼選出來的（valid）</h2>
 <p>候選 K=500，特徵只取 2023-03-01 之前，答案是 [2023-03-01, 2023-06-01) 內
 未曾互動過的商品。五次執行共用同一批 20,000 位使用者，因此可以直接相減。</p>
 
@@ -267,9 +295,11 @@ CI [+0.00383, +0.00602]。兩者都不跨 0。</p>
 <p><a href="demo/demo.html">三位使用者的互動展示</a>由實際程式產生：展示兩種興趣與一個冷啟動限制案例。
 商品與互動全為合成資料，頁面保留失敗推薦，不當作 Amazon 成績。</p>
 <h2>下一步與邊界</h2>
-<p>valid 已重跑、融合設定已比較、召回缺口已量。下一步是<strong>提高共現圖的覆蓋率</strong>——
-21.7% 是目前唯一直接指出「該動哪一層」的數字。之後才凍結設定跑 test，
-再評估精排、模型持久化、ANN / 預計算與服務延遲。線上收益需 A/B 驗證。</p>
+<p>valid 已重跑、融合設定已比較、召回缺口已量、test 已凍結後執行一次。
+下一步是<strong>提高共現圖的覆蓋率</strong>——約 20% 是目前唯一直接指出「該動哪一層」的數字，
+而 test 上共現單路掉了 61%，更確認這是最脆弱的一環。
+之後才是精排、模型持久化、ANN / 預計算與服務延遲。線上收益需 A/B 驗證。
+注意：test 已經用掉了，任何後續調整都必須另切一段未使用過的時間窗。</p>
 <p>另一個已知偏誤：內容式通道的冷啟動候選來自 metadata 與 <code>item_map</code> 的內連接，
 而 <code>item_map</code> 建自全時間範圍的互動。所以「cutoff 前零互動」的冷商品，等於
 「未來某個時點一定會有互動」的商品——cutoff 後才首次出現的商品有 902,209 件，
@@ -278,6 +308,6 @@ CI [+0.00383, +0.00602]。兩者都不跨 0。</p>
 <p>目前評估只涵蓋有歷史且未來有新互動的使用者；訓練後才出現的商品保留在答案內，
 另外揭露不可達比例。時間切分不能消除評論選樣偏差。</p>
 <footer><p><a href="verification.md">本次驗證紀錄</a> · <a href="../docs/evaluation_protocol.md">評估協定與重跑命令</a></p>
-<p>valid 結果為 2026-09-16 原機重跑；「歷史全量工程數字」與「歷史召回結果」仍為舊紀錄。
-test 尚未執行，未宣稱泛化成效或已上線。</p></footer>
+<p>valid 結果為 2026-09-16 原機重跑，test 為 2026-09-17 凍結設定後執行一次；
+「歷史全量工程數字」與「歷史召回結果」仍為舊紀錄。未宣稱線上成效或已上線。</p></footer>
 </main></body></html>
