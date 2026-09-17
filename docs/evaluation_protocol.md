@@ -73,7 +73,13 @@ uv run python scripts/06_recall_eval.py --segment valid --max-users 20000 --seed
 選定設定後記錄理由與檔名，鎖定設定，再以 `--segment test` 執行一次。
 valid 上已比較等權 1／1／1 與 1／1／0.25（內容式通道），0.25 在 Recall@10 與
 Recall@500 都較佳且保住候選聯集上限，暫定為選用設定。權重 0.5 與 0.15 的兩次
-執行沒有跑完，`status` 仍是 `running`，因此這不是完整掃描。test 尚未執行。
+執行沒有跑完，`status` 仍是 `running`，因此這不是完整掃描。
+
+設定凍結後，test 已於 2026-09-17 執行一次，紀錄在 `reports/runs/test-final.json`：
+加權 RRF 1／1／0.25 的 Recall@500 = 0.02778（valid 為 0.03023，−8.1%），
+相對熱門 +20.8%（valid 為 +19.4%），paired bootstrap 在 @10／@100／@500 均不跨 0。
+test 族群的平均歷史長度只有 4.8（valid 為 21.5），是更難也不同的母體。
+**此後不得再依 test 分數調整任何參數；要再調必須另切一段未使用過的時間窗。**
 
 舊的 21,317 人結果缺少原始命令；禁止補寫推測的 max-users、seed 或 CI。
 要比較新舊 ALS，可另外保存舊 commit 的結果與新結果，使用完全相同的新抽樣協定；
