@@ -108,11 +108,13 @@ footer a { color: var(--series-1); }
 </style></head><body><main class="wrap">
 <header><p class="meta">AMAZON REVIEWS 2023 · 單機資料工程 / 離線推薦</p>
 <h1>5.71 億筆評論，<br>從資料處理到候選召回。</h1>
-<p class="sub">完成資料管線、三路召回與時間切分評估；精排與線上服務尚未完成。</p>
+<p class="sub">完成資料管線、五路召回與時間切分評估；精排與線上服務尚未完成。</p>
 <p class="meta"><a href="demo/demo.html">開啟三位使用者展示 →</a>　·　<a href="../README.md">README</a></p></header>
 <div class="callout"><span class="k">數據來源與狀態</span>
-<p>本頁全量數字沿用舊版紀錄，本次環境沒有原始 D 槽資料，未重跑全量。
-新版 ALS、抽樣與融合已有程式修正；新版本成績與加速幅度仍待量測。
+<p>2026-09-16 已在原機重跑全量 valid：20,000 位使用者，五次執行共用同一批樣本
+（指紋 <code>4176b658…</code>），權重掃描與可及性診斷均已完成，原始紀錄在
+<code>reports/runs/</code>。下方「歷史全量工程數字」與「歷史召回結果」仍沿用舊紀錄，
+未重新驗證。<strong>test 時間段尚未執行</strong>，不能把 valid 結果當成泛化或線上成效。
 <a href="legacy_results.json">歷史數據紀錄</a>保留未知欄位，不推測補填。</p></div>
 <div class="tiles"><div class="tile"><div class="n">5.71 億</div><div class="l">歷史紀錄：原始評論列數</div></div>
 <div class="tile"><div class="n">30.8 分鐘</div><div class="l">歷史紀錄：全量轉檔</div></div>
@@ -134,7 +136,93 @@ footer a { color: var(--series-1); }
 <p>資料包含 33 個正式類別加 Unknown，共 34 個檔案。
 舊報告中單類別與全量的單次互動使用者比例分別為 92.3% 與 19.2%。
 跨類別有助增加可評估歷史；這不代表所有單類別推薦任務都不可行。</p>
-<h2>歷史召回結果</h2>
+<h2>修正後的 valid 結果</h2>
+<p>候選 K=500，特徵只取 2023-03-01 之前，答案是 [2023-03-01, 2023-06-01) 內
+未曾互動過的商品。五次執行共用同一批 20,000 位使用者，因此可以直接相減。</p>
+
+<figure><svg viewBox="0 0 700 300" xmlns="http://www.w3.org/2000/svg" role="img"
+  aria-label="內容式通道權重與 Recall@500 的關係：0.25 時最高">
+  <line class="gridline" x1="64" y1="252" x2="676" y2="252"/>
+  <line class="gridline" x1="64" y1="186.9" x2="676" y2="186.9"/>
+  <line class="gridline" x1="64" y1="121.7" x2="676" y2="121.7"/>
+  <line class="gridline" x1="64" y1="56.6" x2="676" y2="56.6"/>
+  <text class="axis-label" x="56" y="256" text-anchor="end">0.0270</text>
+  <text class="axis-label" x="56" y="191" text-anchor="end">0.0280</text>
+  <text class="axis-label" x="56" y="126" text-anchor="end">0.0290</text>
+  <text class="axis-label" x="56" y="61" text-anchor="end">0.0300</text>
+  <line x1="64" y1="97.0" x2="676" y2="97.0" stroke="var(--text-muted)"
+        stroke-width="1.5" stroke-dasharray="5 4"/>
+  <text class="bar-label" x="676" y="90" text-anchor="end">兩路基線 0.02938</text>
+  <polyline fill="none" stroke="var(--series-1)" stroke-width="2"
+            stroke-linejoin="round" stroke-linecap="round"
+            points="64,97.0 155.8,60.5 217,41.6 278.2,60.5 370,103.5 676,219.4"/>
+  <g stroke="var(--surface)" stroke-width="2" fill="var(--series-1)">
+    <circle cx="64" cy="97.0" r="5"><title>權重 0（兩路基線）：Recall@500 = 0.02938</title></circle>
+    <circle cx="155.8" cy="60.5" r="5"><title>權重 0.15：Recall@500 = 0.02994</title></circle>
+    <circle cx="217" cy="41.6" r="5"><title>權重 0.25：Recall@500 = 0.03023</title></circle>
+    <circle cx="278.2" cy="60.5" r="5"><title>權重 0.35：Recall@500 = 0.02994</title></circle>
+    <circle cx="370" cy="103.5" r="5"><title>權重 0.5：Recall@500 = 0.02928</title></circle>
+    <circle cx="676" cy="219.4" r="5"><title>權重 1.0（等權）：Recall@500 = 0.02750</title></circle>
+  </g>
+  <text class="bar-label" x="217" y="31" text-anchor="middle">0.03023</text>
+  <text class="bar-label" x="676" y="238" text-anchor="end">0.02750</text>
+  <text class="bar-name" x="64" y="274" text-anchor="middle">0</text>
+  <text class="bar-name" x="155.8" y="274" text-anchor="middle">0.15</text>
+  <text class="bar-name" x="217" y="274" text-anchor="middle">0.25</text>
+  <text class="bar-name" x="278.2" y="274" text-anchor="middle">0.35</text>
+  <text class="bar-name" x="370" y="274" text-anchor="middle">0.5</text>
+  <text class="bar-name" x="676" y="274" text-anchor="middle">1.0</text>
+  <text class="axis-label" x="370" y="294" text-anchor="middle">內容式通道在加權 RRF 中的權重（熱門與共現固定為 1）</text>
+</svg>
+<figcaption>縱軸為 Recall@500，<strong>起點不是 0</strong>（0.0270–0.0305），
+因此視覺落差比實際比例大：最高與最低之間只差約 10%。橫軸依權重線性擺放，
+0.5 與 1.0 之間的空白代表那一段沒有取樣。虛線是熱門＋共現的兩路基線。</figcaption></figure>
+
+<p><strong>等權融合會被弱通道拖累。</strong> 這是本專案量到三次的同一件事：
+加入 ALS、內容式或類別熱門，候選聯集上限每次都上升，實際交付的 500 長度清單
+每次都下降。等權 RRF 讓 Recall@500 只有熱門一半的通道，跟熱門搶同樣的前段名額。
+把內容式降到 0.25 之後，才首次同時贏過基線並保住升高的上限。</p>
+
+<div class="tw"><table><thead><tr><th>單路通道</th><th>Recall@10</th><th>Recall@500</th><th>NDCG@500</th></tr></thead><tbody>
+<tr><td>熱門</td><td class="num">0.0025</td><td class="num">0.0253</td><td class="num">0.0054</td></tr>
+<tr><td>共現</td><td class="num">0.0023</td><td class="num">0.0063</td><td class="num">0.0026</td></tr>
+<tr><td>ALS（標準 fold-in）</td><td class="num">0.0011</td><td class="num">0.0125</td><td class="num">0.0028</td></tr>
+<tr><td>內容</td><td class="num">0.0008</td><td class="num">0.0103</td><td class="num">0.0022</td></tr>
+<tr><td>類別熱門</td><td class="num">0.0019</td><td class="num">0.0200</td><td class="num">0.0044</td></tr>
+</tbody></table></div>
+<p class="gloss">沒有任何一路單獨贏過熱門。這不是失敗——召回層的價值在互補，
+不在單路取勝；但它也說明為什麼等權融合會扣分。</p>
+
+<div class="tw"><table><thead><tr><th>加權 RRF（熱門／共現／第三路）</th><th>Recall@10</th><th>Recall@500</th><th>候選聯集上限</th></tr></thead><tbody>
+<tr><td>熱門＋共現（基線）</td><td class="num">0.00388</td><td class="num">0.02938</td><td class="num">0.0299</td></tr>
+<tr><td>＋ALS，1／1／1</td><td class="num">0.00254</td><td class="num">0.02655</td><td class="num">0.0362</td></tr>
+<tr><td>＋內容，1／1／1</td><td class="num">0.00317</td><td class="num">0.02750</td><td class="num">0.0383</td></tr>
+<tr><td><strong>＋內容，1／1／0.25</strong></td><td class="num">0.00401</td><td class="num"><strong>0.03023</strong></td><td class="num">0.0383</td></tr>
+<tr><td>＋類別熱門，1／1／0.25</td><td class="num">0.00385</td><td class="num">0.02995</td><td class="num">0.0394</td></tr>
+</tbody></table></div>
+<p>對熱門的 paired bootstrap（同一批使用者、1,000 次重抽樣、95% percentile CI）：
+基線 ΔRecall@500 = +0.00406，CI [+0.00327, +0.00493]；權重 0.25 為 +0.00491，
+CI [+0.00383, +0.00602]。兩者都不跨 0。</p>
+<p class="gloss">但 0.15、0.25、0.35 三點只差約 1%，
+<strong>沒有做權重之間的 paired bootstrap，因此不宣稱 0.25 顯著優於相鄰權重</strong>；
+能說的是 0.25 附近明顯優於 0 與 1.0。候選聯集上限也不是等預算比較：
+三路聯集有 1,500 個候選，兩路只有 1,000 個。</p>
+
+<h2>召回缺口在哪裡</h2>
+<p>Recall@500 約 3.0%，而 cutoff 前目錄的理論上限是 89.7%。缺口極大，
+所以真正要回答的是「缺在哪一層」，而不是再多加一路。</p>
+<div class="tw"><table><thead><tr><th>診斷（以 44,376 筆答案互動為單位）</th><th>比例</th></tr></thead><tbody>
+<tr><td>答案落在使用者買過的類別內</td><td class="num">60.3%</td></tr>
+<tr><td>跨類別（使用者從未買過該類別）</td><td class="num">39.7%</td></tr>
+<tr><td><strong>答案商品存在於共現圖中</strong></td><td class="num"><strong>21.7%</strong></td></tr>
+</tbody></table></div>
+<div class="plain"><span class="k">這一列決定了下一步</span>
+<p>共現通道<strong>碰不到 78.3% 的答案</strong>——那些商品根本不在圖裡，
+融合權重怎麼調都撈不到。該修的是圖的覆蓋率
+（<code>min_cooccurrence</code>、<code>window_days</code>、<code>max_items_per_user</code>
+三個參數都在限制圖的規模），不是融合層。這是第一次有數字直接指出該動哪一層。</p></div>
+
+<h2>歷史召回結果（舊抽樣，不可與上表相減）</h2>
 <p>valid：[2023-03-01, 2023-06-01)，報告人數 21,317，候選 K=500。
 原始抽樣命令未保存，不能把此表直接當成新版實驗對照。</p>
 <div class="tw"><table><thead><tr><th>通道</th><th>Recall@10</th><th>Recall@500</th><th>NDCG@10</th></tr></thead><tbody>
@@ -151,19 +239,45 @@ footer a { color: var(--series-1); }
 <ul><li><strong>ALS 使用者向量：</strong>由商品向量平均改為標準 fold-in，沿用訓練時的信心權重與正規化。</li>
 <li><strong>雙向分塊：</strong>同時切使用者與商品；舊公式在 1,152 萬商品時仍是 batch=1，舊加速宣稱已撤回。新版仍是精確全模型搜尋。</li>
 <li><strong>嚴格抽樣上限：</strong>先篩合格使用者，再 hash top-N。舊版 max-users 實際是比例門檻。</li>
-<li><strong>融合比較：</strong>保留 round-robin 並加入加權 RRF；等權只是起點，尚未證實較佳。</li>
+<li><strong>融合比較：</strong>保留 round-robin 並加入加權 RRF。等權已證實不是好起點——
+掃過 0.15／0.25／0.35／0.5／1.0 之後，內容式降到 0.25 才首次贏過兩路基線。</li>
+<li><strong>屬性表綁定：</strong>內容式通道的商品屬性表原本綁死在全域設定路徑，與 <code>--src</code> 無關，
+因此用合成展示資料評估時會靜靜載入正式目錄的 3,538 萬件商品，把真實 item_idx 灌進
+合成索引空間——不報錯，只是結果全錯。現已移除回退路徑，必須由 <code>--items</code> 明確指定。</li>
+<li><strong>可及性診斷：</strong>寫好卻沒有任何地方呼叫的 <code>channel_reachability</code> 已接上，
+每次執行都會寫進 JSON。</li>
 <li><strong>實驗證據：</strong>JSON 保存版本、參數、樣本人數、來源指紋與結果，另報冷商品比例、候選聯集上限與 paired bootstrap。</li></ul>
 <h2>如何解讀失敗？</h2>
-<p>放寬共現或加入 ALS 後，合併成績下降，提示融合策略值得優先驗證。
-但向量估計、通道品質、過濾門檻與樣本差異仍可能影響結果；目前不能斷言原因只有合併層。</p>
+<p>先前只能說「合併成績下降，提示融合策略值得優先驗證」。現在掃完權重、量完可及性，
+可以講得更確定：<strong>等權融合確實是主因之一，但不是全部。</strong>
+降權讓兩路基線被超越了，可是共現圖只覆蓋 21.7% 的答案——這一段是融合層碰不到的，
+必須回去修圖。兩個原因同時成立，而且要修的地方不同。</p>
+<p>這一輪還留下兩個否定結果，一併寫在這裡而不是刪掉：</p>
+<ul><li><strong>向量化 Top-K 失敗。</strong>profile 顯示 <code>_top_k</code> 佔 ALS recommend
+約八成，依此把逐列改成整批 <code>argpartition</code>，用 300 組含大量同分的隨機案例證明
+與原版逐位元等價——但慢 1.6 倍。逐列版本只對有限值的子集做 partition，整批版本為了
+一次處理要多做約六趟全矩陣掃描。profile 的「佔比最高」不等於「改了會變快」。</li>
+<li><strong>類別熱門通道沒有用。</strong>把熱度限制在使用者買過的類別內，單路 Recall@500
+只有 0.0200，低於全域熱門的 0.0253；任何權重下都輸給內容式。它把候選聯集上限推到
+全場最高的 0.0394，卻交付最少。</li></ul>
+<p class="gloss">真正有效的 ALS 加速是另一件事：瓶頸不是 Top-K 而是記憶體頻寬。
+在放不進快取的商品因子矩陣上，<code>user_batch_size</code> 由 64 提高到 1024 量到 1.48x，
+但 2048 會掉到 0.60x。預設仍維持 64，因為那是記憶體取捨。</p>
 <h2>能展示什麼？</h2>
 <p><a href="demo/demo.html">三位使用者的互動展示</a>由實際程式產生：展示兩種興趣與一個冷啟動限制案例。
 商品與互動全為合成資料，頁面保留失敗推薦，不當作 Amazon 成績。</p>
 <h2>下一步與邊界</h2>
-<p>先在原機重跑新版 valid、比較融合設定與召回缺口，凍結設定後跑 test。
+<p>valid 已重跑、融合設定已比較、召回缺口已量。下一步是<strong>提高共現圖的覆蓋率</strong>——
+21.7% 是目前唯一直接指出「該動哪一層」的數字。之後才凍結設定跑 test，
 再評估精排、模型持久化、ANN / 預計算與服務延遲。線上收益需 A/B 驗證。</p>
+<p>另一個已知偏誤：內容式通道的冷啟動候選來自 metadata 與 <code>item_map</code> 的內連接，
+而 <code>item_map</code> 建自全時間範圍的互動。所以「cutoff 前零互動」的冷商品，等於
+「未來某個時點一定會有互動」的商品——cutoff 後才首次出現的商品有 902,209 件，
+內容池的冷商品有 770,089 件，佔 85.4%。<strong>這一路觸及冷商品的能力被系統性高估</strong>，
+修正需要保留沒有任何互動的商品，會改變 <code>item_map</code> 的語意，尚未實作。</p>
 <p>目前評估只涵蓋有歷史且未來有新互動的使用者；訓練後才出現的商品保留在答案內，
 另外揭露不可達比例。時間切分不能消除評論選樣偏差。</p>
 <footer><p><a href="verification.md">本次驗證紀錄</a> · <a href="../docs/evaluation_protocol.md">評估協定與重跑命令</a></p>
-<p>全量數字為舊版紀錄；展示與新測試另有輸出。未宣稱新版全量已驗證或已上線。</p></footer>
+<p>valid 結果為 2026-09-16 原機重跑；「歷史全量工程數字」與「歷史召回結果」仍為舊紀錄。
+test 尚未執行，未宣稱泛化成效或已上線。</p></footer>
 </main></body></html>
