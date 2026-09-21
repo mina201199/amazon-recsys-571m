@@ -149,20 +149,55 @@ test：歷史取 2023-06-01 之前，答案是 [2023-06-01, 2023-09-10) 內未�
 test 是 0.02301 → 0.02778（<strong>+20.8%</strong>）。
 test 的 paired bootstrap 在 @10、@100、@500 全部不跨 0。</p>
 <div class="plain"><span class="k">test 不只是「比較晚的 valid」</span>
-<p>合格條件相同，但人群結構差很多：平均歷史長度從 21.5 掉到 <strong>4.8</strong>，
-答案落在使用者買過類別內的比例從 60.3% 掉到 <strong>35.0%</strong>。
-原因是 test 的 cutoff 是 2023-06-01，2023 上半年才開始評論的使用者也符合資格，
-而這批人根本不在 valid 的母體裡。提升在這種族群位移下仍然撐住，
-比兩段人群相同時更有說服力——但這是<strong>一次觀察</strong>，
-不能因此宣稱模型對任何族群都穩健。</p></div>
+<p>合格條件相同，但整個母體就是不同的：合格使用者從 593 萬（2022-12）掉到
+<strong>111 萬</strong>，平均歷史長度從 24.4 掉到 <strong>4.7</strong>，中位數從 10 掉到 3。
+這不是抽樣造成的，原因是<strong>資料集尾端的採集截斷</strong>——test 窗的每日互動量
+只有 2022 常態的 18%（見下節）。提升在這種位移下仍然撐住，
+但這一窗的資料本身是殘缺的，不能當成「一段比較晚的正常時期」。</p></div>
 <div class="tw"><table><thead><tr><th>單路 Recall@500</th><th>valid</th><th>test</th><th>變化</th></tr></thead><tbody>
 <tr><td>熱門</td><td class="num">0.02532</td><td class="num">0.02301</td><td class="num">−9.1%</td></tr>
 <tr><td>共現</td><td class="num">0.00634</td><td class="num">0.00247</td><td class="num"><strong>−61.1%</strong></td></tr>
 <tr><td>內容</td><td class="num">0.01033</td><td class="num">0.01219</td><td class="num">+18.0%</td></tr>
 </tbody></table></div>
-<p class="gloss">共現幾乎崩掉：歷史從 21.5 筆掉到 4.8 筆，可查鄰居的起點就少了一大半，
-再加上共現圖本來只覆蓋約 20% 的答案。內容式反而變好，因為薄歷史使用者更依賴屬性——
-但這一路有已知的冷啟動偏誤，不能單看這個數字。<strong>此後不再依 test 分數調整參數。</strong></p>
+<p class="gloss">共現幾乎崩掉。原本推測是「共現圖只覆蓋約 20% 的答案」，但多窗資料顯示
+這個歸因是錯的——共現圖覆蓋率在每一窗都是 20–22%，完全沒變，變的是歷史長度。
+共現不是隨時間退化，而是<strong>對薄歷史脆弱</strong>。內容式反而變好，因為薄歷史使用者
+更依賴屬性——但這一路有已知的冷啟動偏誤，不能單看這個數字。
+<strong>此後不再依 test 分數調整參數。</strong></p>
+
+<h2>資料集尾端有嚴重截斷</h2>
+<p>多窗驗證意外查出一件更根本的事。資料集宣稱涵蓋到 2023-09，
+但<strong>最後幾個月的資料量是塌的</strong>——這是快照式資料集常見的採集尾端效應，
+不是真實的行為變化。</p>
+<div class="tw"><table><thead><tr><th>評估窗</th><th>互動數</th><th>每日互動</th><th>相對 2022 常態</th></tr></thead><tbody>
+<tr><td>2022-06</td><td class="num">16,386,089</td><td class="num">178,110</td><td class="num">—</td></tr>
+<tr><td>2022-09</td><td class="num">16,064,898</td><td class="num">176,537</td><td class="num">−1%</td></tr>
+<tr><td>2022-12</td><td class="num">17,226,504</td><td class="num">191,406</td><td class="num">+7%</td></tr>
+<tr><td>2023-03（valid）</td><td class="num">11,059,012</td><td class="num">120,207</td><td class="num"><strong>−33%</strong></td></tr>
+<tr><td>2023-06（test）</td><td class="num">2,991,116</td><td class="num">32,512</td><td class="num"><strong>−82%</strong></td></tr>
+<tr><td>2023-09-01～09-14</td><td class="num">50,810</td><td class="num">3,629</td><td class="num"><strong>−98%</strong></td></tr>
+</tbody></table></div>
+<div class="callout"><span class="k">這影響整個專案的結論怎麼讀</span>
+<p>test 窗正好落在塌陷區，valid 窗也已在衰減區。也就是說，本專案唯一的留出結果
+落在一段資料殘缺的時期。切分邊界當初是在<strong>沒有量過各窗資料量</strong>的情況下選的——
+這是切分設計的疏漏，多窗驗證才把它暴露出來。</p></div>
+
+<h2>多時間窗驗證</h2>
+<p>同一組凍結設定換五個時間窗重跑，沒有任何調參。三個 2022 窗先前從未評估過。</p>
+<div class="tw"><table><thead><tr><th>評估窗</th><th>每日互動</th><th>熱門 R@500</th><th>融合 R@500</th><th>提升</th></tr></thead><tbody>
+<tr><td>2022-06</td><td class="num">178k</td><td class="num">0.03006</td><td class="num">0.03252</td><td class="num">+8.2%</td></tr>
+<tr><td>2022-09</td><td class="num">177k</td><td class="num">0.02637</td><td class="num">0.03042</td><td class="num">+15.4%</td></tr>
+<tr><td>2022-12</td><td class="num">191k</td><td class="num">0.02977</td><td class="num">0.03159</td><td class="num">+6.1%</td></tr>
+<tr><td>2023-03（調參窗）</td><td class="num">120k</td><td class="num">0.02532</td><td class="num">0.03023</td><td class="num">+19.4%</td></tr>
+<tr><td>2023-06（test）</td><td class="num">33k</td><td class="num">0.02301</td><td class="num">0.02778</td><td class="num">+20.8%</td></tr>
+</tbody></table></div>
+<p><strong>方向穩健：5 個窗全部為正，CI 全部不跨 0。但幅度不穩，而且偏高的兩個
+都是有問題的窗</strong>——三個未受截斷影響的 2022 窗平均 +9.9%，
+調參窗與塌陷窗平均 +20.1%。所以 +20.8% 是觀察範圍的頂端，不是典型值。</p>
+<p class="gloss">提升變大主要來自分母退化：融合絕對值大致穩在 0.028–0.033，
+熱門基線卻從 0.03006 一路掉到 0.02301——不是模型變好，是基線變差。
+另外這三個 2022 窗是<strong>回測不是前測</strong>：權重在 2023-03 選定後套回 2022，
+時間上倒著走，證明的是跨時期穩健，不是對未來的泛化能力。</p>
 
 <h2>權重是怎麼選出來的（valid）</h2>
 <p>候選 K=500，特徵只取 2023-03-01 之前，答案是 [2023-03-01, 2023-06-01) 內

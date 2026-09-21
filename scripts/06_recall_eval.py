@@ -64,6 +64,11 @@ def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--src", type=Path, default=config.INTERACTIONS_DIR)
     ap.add_argument("--segment", choices=["valid", "test"], default="valid")
+    # 換時間窗重跑同一組凍結設定：只有一次觀察時，分不出提升是真的
+    # 還是那一段時間的運氣。三個邊界必須一起給，避免預設值與自訂值混用。
+    ap.add_argument("--train-end", help="切分邊界 YYYY-MM-DD；三個邊界必須一起給")
+    ap.add_argument("--valid-end", help="切分邊界 YYYY-MM-DD")
+    ap.add_argument("--test-end", help="切分邊界 YYYY-MM-DD（排他終點）")
     ap.add_argument("--k", type=int, default=500)
     ap.add_argument("--eval-ks", type=int, nargs="+", default=[10, 100, 500])
     ap.add_argument("--max-users", type=int, default=None, help="合格使用者的嚴格人數上限")
@@ -91,6 +96,13 @@ def main() -> int:
         ap.error("bootstrap-samples 不可為負")
     if len(set(args.channels)) != len(args.channels):
         ap.error("channels 不可重複")
+    bounds = (args.train_end, args.valid_end, args.test_end)
+    if any(bounds) and not all(bounds):
+        ap.error("--train-end / --valid-end / --test-end 三個邊界必須一起給，不可只給部分")
+    try:
+        split = S.TimeSplit(*(S.ts(b) for b in bounds)) if all(bounds) else S.DEFAULT_SPLIT
+    except ValueError as exc:
+        ap.error(f"切分邊界無效：{exc}")
     if "content" in args.channels and args.items is None:
         ap.error("--channels 含 content 時必須指定 --items；"
                  "屬性表與 --src 必須出自同一份 item_map，否則 item_idx 指向不同商品")
@@ -129,7 +141,6 @@ def main() -> int:
             f"read_parquet('{args.items.as_posix().replace(chr(39), chr(39) * 2)}')"
             if args.items is not None else None
         )
-        split = S.DEFAULT_SPLIT
         cutoff = split.feature_cutoff(args.segment)
         record["split"] = {"train_end": S.to_date(split.train_end),
                            "valid_end": S.to_date(split.valid_end),

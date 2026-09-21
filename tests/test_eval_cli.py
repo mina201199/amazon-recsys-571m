@@ -152,3 +152,52 @@ def test_reachability_reports_why_it_was_skipped_without_categories(tmp_path):
     assert result.returncode == 0, result.stdout + result.stderr
     record = json.loads(output.read_text(encoding="utf-8"))
     assert "category_idx" in record["reachability"]["skipped"]
+
+
+def test_split_boundaries_can_be_overridden_for_rolling_origin(tmp_path):
+    """三個邊界可由 CLI 覆寫，才能把同一組凍結設定換時間窗重跑。
+
+    只有一次觀察時，無法分辨提升是真的還是那一段時間的運氣。
+    """
+    source = tmp_path / "interactions"
+    source.mkdir()
+    with duckdb.connect() as con:
+        con.execute("CREATE TABLE inter(user_idx INT, item_idx INT, category_idx INT, ts BIGINT)")
+        con.executemany("INSERT INTO inter VALUES (?, ?, ?, ?)", [
+            (1, 1, 7, ts("2021-12-01")), (2, 2, 7, ts("2021-12-01")),
+            (1, 2, 7, ts("2022-01-15")), (2, 3, 7, ts("2022-01-15"))])
+        con.execute(f"COPY inter TO '{(source / 'part.parquet').as_posix()}' (FORMAT PARQUET)")
+    output = tmp_path / "run.json"
+    result = subprocess.run(
+        [sys.executable, str(ROOT / "scripts/06_recall_eval.py"), "--src", str(source),
+         "--k", "2", "--eval-ks", "2", "--channels", "popularity", "--segment", "valid",
+         "--train-end", "2022-01-01", "--valid-end", "2022-02-01", "--test-end", "2022-03-01",
+         "--bootstrap-samples", "0", "--temp-dir", str(tmp_path / "tmp"),
+         "--output", str(output)],
+        capture_output=True, text=True, encoding="utf-8", cwd=ROOT,
+        env={**os.environ, "PYTHONUTF8": "1"})
+    assert result.returncode == 0, result.stdout + result.stderr
+    record = json.loads(output.read_text(encoding="utf-8"))
+    assert record["split"] == {
+        "train_end": "2022-01-01", "valid_end": "2022-02-01",
+        "test_end_exclusive": "2022-03-01", "feature_cutoff_exclusive": "2022-01-01"}
+    assert record["sample"]["n_users"] == 2
+
+
+def test_partial_split_override_is_rejected(tmp_path):
+    """只給一兩個邊界必須當場失敗，不能默默混用預設值與自訂值。"""
+    source = tmp_path / "interactions"
+    source.mkdir()
+    with duckdb.connect() as con:
+        con.execute("CREATE TABLE inter(user_idx INT, item_idx INT, ts BIGINT)")
+        con.execute("INSERT INTO inter VALUES (1, 1, 0)")
+        con.execute(f"COPY inter TO '{(source / 'part.parquet').as_posix()}' (FORMAT PARQUET)")
+    result = subprocess.run(
+        [sys.executable, str(ROOT / "scripts/06_recall_eval.py"), "--src", str(source),
+         "--k", "2", "--eval-ks", "2", "--channels", "popularity",
+         "--train-end", "2022-01-01",
+         "--temp-dir", str(tmp_path / "tmp"), "--output", str(tmp_path / "run.json")],
+        capture_output=True, text=True, encoding="utf-8", cwd=ROOT,
+        env={**os.environ, "PYTHONUTF8": "1"})
+    assert result.returncode != 0
+    assert "三個邊界" in result.stdout + result.stderr
