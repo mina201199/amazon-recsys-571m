@@ -96,7 +96,7 @@ verified_purchase   BOOLEAN
 
 **路徑分離原則：**
 ```
-C:\Users\User\Desktop\machine learning\   ← git 追蹤，只有程式碼
+amazon-recsys-571m\                       ← git 追蹤，只有程式碼
 D:\amazon-reviews-2023\                   ← 資料，永不進 git
 ```
 
